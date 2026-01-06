@@ -1,0 +1,13 @@
+{
+  "light_square_color": "#f0d9b5",
+  "dark_square_color": "#b58863",
+  "highlight_color": "#646f40",
+  "selected_color": "#829769",
+  "legal_move_color": "#546e7a",
+  "piece_style": "ascii",
+  "square_size": 70,
+  "show_coordinates": true,
+  "show_legal_moves": true,
+  "sounds_enabled": true,
+  "sound_volume": 0.7
+}

@@ -1,0 +1,13 @@
+PyQt6==6.6.1
+python-chess==1.999
+requests==2.31.0
+numpy==1.24.3
+
+# Recommended for production (HiDPI/4K support)
+# PyQt6-SVG==6.6.0  # SVG rendering for sharp graphics
+
+# Build dependencies (optional - only for building executables)
+# pyinstaller>=6.0
+# nuitka>=1.8
+# Pillow>=10.0  # For asset generation
+

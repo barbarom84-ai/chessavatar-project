@@ -1,0 +1,1342 @@
+"""
+Main window for ChessAvatar application
+"""
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+                             QSplitter, QMenuBar, QMenu, QMessageBox, QSizePolicy, 
+                             QFileDialog, QPushButton, QDialog)
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QAction, QIcon
+import chess
+import asyncio
+
+from ui.chessboard import ChessBoardWidget
+from ui.notation_panel import NotationPanel
+from ui.clock_widget import ClockWidget
+from ui.engine_panel import EnginePanel
+from ui.engine_config_dialog import EngineConfigDialog
+from ui.avatar_panel import AvatarPanel, AvatarStatusWidget
+from ui.avatar_creation_dialog import AvatarCreationDialog
+from ui.board_config_dialog import BoardConfigDialog, BoardConfig
+from ui.game_over_dialog import GameOverDialog
+from ui.new_game_dialog import NewGameDialog
+from ui.styles import get_scaled_theme
+from ui.resolution_manager import get_resolution_manager
+from core.game import ChessGame
+from core.engine_manager import EngineManager
+from core.avatar_manager import AvatarManager
+from core.avatar_worker import AvatarEngineManager
+from core.sound_manager import get_sound_manager
+from core.pgn_manager import get_pgn_manager
+
+
+class MainWindow(QMainWindow):
+    """Main application window"""
+    
+    def __init__(self):
+        super().__init__()
+        self.res_mgr = get_resolution_manager()
+        self.game = ChessGame()
+        self.engine_manager = EngineManager()
+        self.avatar_manager = AvatarManager()
+        self.avatar_engine_manager = AvatarEngineManager()  # NEW: Avatar engine manager
+        self.sound_manager = get_sound_manager()
+        self.pgn_manager = get_pgn_manager()
+        self.board_config = BoardConfig()
+        self.playing_vs_avatar = False
+        self.avatar_id = None  # Store current avatar ID
+        self._engine_auto_started = False  # Flag to ensure auto-start happens only once
+        # Play vs engine mode
+        self.play_mode = "free"  # "free", "vs_engine", or "vs_avatar"
+        self.player_color = chess.WHITE  # Color of human player
+        self.waiting_for_engine = False
+        # Clock auto-start flag
+        self.clock_started = False  # Flag pour savoir si la pendule a démarré
+        self.setup_engine_signals()
+        self.init_ui()
+        self.apply_theme()
+        self.apply_board_config()
+    
+    def showEvent(self, event):
+        """Called when window is shown - use to auto-start engine after Qt event loop is running"""
+        print("DEBUG: MainWindow.showEvent appelé")
+        super().showEvent(event)
+        # Auto-start engine on first show
+        if not self._engine_auto_started:
+            print("DEBUG: Premier showEvent, appel DIRECT de auto_start_engine")
+            self._engine_auto_started = True
+            # Call directly - the Qt event loop is running at this point
+            try:
+                self.auto_start_engine()
+            except Exception as e:
+                print(f"DEBUG: ERREUR dans auto_start_engine: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("DEBUG: showEvent suivant, auto_start déjà fait")
+        
+    def init_ui(self):
+        """Initialize the user interface"""
+        self.setWindowTitle("ChessAvatar - Analyse d'échecs")
+        
+        # Get optimal window size from resolution manager
+        width, height = self.res_mgr.get_window_size()
+        self.setGeometry(100, 100, width, height)
+        
+        # Create central widget
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # Main layout with scaled margins
+        main_layout = QHBoxLayout(central_widget)
+        margin = self.res_mgr.get_margin(10)
+        main_layout.setContentsMargins(margin, margin, margin, margin)
+        
+        # Create splitter for resizable panels
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # Left side - Chess board with engine panel below
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(self.res_mgr.get_spacing(10))
+        
+        self.chessboard = ChessBoardWidget()
+        self.chessboard.set_board(self.game.board)
+        self.chessboard.move_made.connect(self.on_move_made)
+        # Set size policy to allow expansion but maintain aspect ratio
+        self.chessboard.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding
+        )
+        left_layout.addWidget(self.chessboard, stretch=2)
+        
+        # Engine panel below board with scaled maximum height
+        self.engine_panel = EnginePanel()
+        self.engine_panel.start_analysis.connect(self.on_engine_start_analysis)
+        self.engine_panel.stop_analysis.connect(self.on_engine_stop_analysis)
+        max_engine_height = self.res_mgr.get_engine_panel_height()
+        self.engine_panel.setMaximumHeight(max_engine_height)
+        self.engine_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed
+        )
+        left_layout.addWidget(self.engine_panel, stretch=0)
+        
+        main_splitter.addWidget(left_panel)
+        
+        # Right side panel
+        right_panel = QWidget()
+        right_panel.setObjectName("rightPanel")
+        right_layout = QVBoxLayout(right_panel)
+        right_margin = self.res_mgr.get_margin(5)
+        right_layout.setContentsMargins(right_margin, right_margin, right_margin, right_margin)
+        right_layout.setSpacing(self.res_mgr.get_spacing(10))
+        
+        # Avatar status (who are you playing against)
+        self.avatar_status = AvatarStatusWidget()
+        self.avatar_status.change_avatar_clicked.connect(self.manage_avatars)  # Open avatar selection
+        right_layout.addWidget(self.avatar_status)
+        
+        # Notation panel
+        self.notation_panel = NotationPanel()
+        right_layout.addWidget(self.notation_panel, stretch=2)
+        
+        # Clock widget
+        self.clock_widget = ClockWidget()
+        self.clock_widget.time_expired.connect(self.on_time_expired)
+        right_layout.addWidget(self.clock_widget, stretch=1)
+        
+        # Game control buttons
+        game_controls_layout = QHBoxLayout()
+        game_controls_layout.setSpacing(self.res_mgr.get_spacing(5))
+        
+        self.resign_button = QPushButton("Abandonner")
+        self.resign_button.setToolTip("Abandonner la partie")
+        self.resign_button.clicked.connect(self.resign_game)
+        self.resign_button.setEnabled(True)
+        self.resign_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        game_controls_layout.addWidget(self.resign_button)
+        
+        self.draw_button = QPushButton("Nulle")
+        self.draw_button.setToolTip("Proposer un match nul")
+        self.draw_button.clicked.connect(self.offer_draw)
+        self.draw_button.setEnabled(True)
+        self.draw_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        game_controls_layout.addWidget(self.draw_button)
+        
+        self.flip_button = QPushButton("Retourner")
+        self.flip_button.setToolTip("Retourner l'échiquier")
+        self.flip_button.clicked.connect(self.flip_board_manual)
+        self.flip_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        game_controls_layout.addWidget(self.flip_button)
+        
+        # Apply style to game control buttons
+        button_style = """
+            QPushButton {
+                background-color: #3a3a3a;
+                color: white;
+                border: 1px solid #555555;
+                border-radius: 5px;
+                padding: 8px 12px;
+                font-size: 10pt;
+                min-height: 30px;
+            }
+            QPushButton:hover {
+                background-color: #4a4a4a;
+                border: 1px solid #666666;
+            }
+            QPushButton:pressed {
+                background-color: #2a2a2a;
+            }
+            QPushButton:disabled {
+                background-color: #2a2a2a;
+                color: #666666;
+            }
+        """
+        self.resign_button.setStyleSheet(button_style)
+        self.draw_button.setStyleSheet(button_style)
+        self.flip_button.setStyleSheet(button_style)
+        
+        right_layout.addLayout(game_controls_layout)
+        
+        main_splitter.addWidget(right_panel)
+        
+        # Set splitter proportions (75% left with board+engine, 25% right)
+        main_splitter.setSizes([1200, 400])
+        
+        main_layout.addWidget(main_splitter)
+        
+        # Create menu bar
+        self.create_menu_bar()
+        
+        # Status bar
+        self.statusBar().showMessage("Prêt - Trait aux blancs")
+        
+        # Note: auto_start_engine() is now called from showEvent() after window is shown
+        
+    def create_menu_bar(self):
+        """Create the application menu bar"""
+        menubar = self.menuBar()
+        
+        # Fichier menu
+        file_menu = menubar.addMenu("Fichier")
+        
+        new_game_action = QAction("Nouvelle partie", self)
+        new_game_action.setShortcut("Ctrl+N")
+        new_game_action.triggered.connect(self.new_game)
+        file_menu.addAction(new_game_action)
+        
+        open_pgn_action = QAction("Ouvrir PGN...", self)
+        open_pgn_action.setShortcut("Ctrl+O")
+        open_pgn_action.triggered.connect(self.open_pgn)
+        file_menu.addAction(open_pgn_action)
+        
+        save_pgn_action = QAction("Sauvegarder PGN...", self)
+        save_pgn_action.setShortcut("Ctrl+S")
+        save_pgn_action.triggered.connect(self.save_pgn)
+        file_menu.addAction(save_pgn_action)
+        
+        file_menu.addSeparator()
+        
+        board_config_action = QAction("⚙ Configuration de l'échiquier...", self)
+        board_config_action.triggered.connect(self.open_board_config)
+        file_menu.addAction(board_config_action)
+        
+        file_menu.addSeparator()
+        
+        quit_action = QAction("Quitter", self)
+        quit_action.setShortcut("Ctrl+Q")
+        quit_action.triggered.connect(self.close)
+        file_menu.addAction(quit_action)
+        
+        # Échiquier menu
+        board_menu = menubar.addMenu("Échiquier")
+        
+        flip_board_action = QAction("Retourner l'échiquier", self)
+        flip_board_action.setShortcut("Ctrl+F")
+        flip_board_action.triggered.connect(self.flip_board)
+        board_menu.addAction(flip_board_action)
+        
+        board_menu.addSeparator()
+        
+        resign_action = QAction("Abandonner", self)
+        resign_action.setShortcut("Ctrl+R")
+        resign_action.triggered.connect(self.resign_game)
+        board_menu.addAction(resign_action)
+        
+        draw_action = QAction("Proposer la nulle", self)
+        draw_action.setShortcut("Ctrl+D")
+        draw_action.triggered.connect(self.offer_draw)
+        board_menu.addAction(draw_action)
+        
+        board_menu.addSeparator()
+        
+        copy_fen_action = QAction("Copier FEN", self)
+        copy_fen_action.setShortcut("Ctrl+Shift+C")
+        copy_fen_action.triggered.connect(self.copy_fen)
+        board_menu.addAction(copy_fen_action)
+        
+        paste_fen_action = QAction("Coller FEN", self)
+        paste_fen_action.setShortcut("Ctrl+Shift+V")
+        paste_fen_action.triggered.connect(self.paste_fen)
+        board_menu.addAction(paste_fen_action)
+        
+        # Analyse menu
+        analysis_menu = menubar.addMenu("Analyse")
+        
+        undo_action = QAction("Annuler le coup", self)
+        undo_action.setShortcut("Ctrl+Z")
+        undo_action.triggered.connect(self.undo_move)
+        analysis_menu.addAction(undo_action)
+        
+        analysis_menu.addSeparator()
+        
+        show_legal_moves_action = QAction("Afficher les coups légaux", self)
+        show_legal_moves_action.setCheckable(True)
+        show_legal_moves_action.setChecked(True)
+        analysis_menu.addAction(show_legal_moves_action)
+        
+        # Moteur menu
+        engine_menu = menubar.addMenu("Moteur")
+        
+        engine_settings_action = QAction("⚙ Configuration des moteurs...", self)
+        engine_settings_action.triggered.connect(self.open_engine_config)
+        engine_menu.addAction(engine_settings_action)
+        
+        engine_menu.addSeparator()
+        
+        # Submenu for selecting engine
+        self.select_engine_menu = QMenu("Sélectionner le moteur", self)
+        engine_menu.addMenu(self.select_engine_menu)
+        self.update_engine_menu()
+        
+        engine_menu.addSeparator()
+        
+        start_engine_action = QAction("▶ Démarrer le moteur", self)
+        start_engine_action.setShortcut("Ctrl+Shift+E")
+        start_engine_action.triggered.connect(lambda: self.start_engine())
+        engine_menu.addAction(start_engine_action)
+        
+        stop_engine_action = QAction("⏹ Arrêter le moteur", self)
+        stop_engine_action.triggered.connect(self.stop_engine)
+        engine_menu.addAction(stop_engine_action)
+        
+        engine_menu.addSeparator()
+        
+        # Play vs Engine mode
+        self.play_vs_engine_action = QAction("🎮 Jouer contre le moteur", self)
+        self.play_vs_engine_action.setCheckable(True)
+        self.play_vs_engine_action.triggered.connect(self.toggle_play_vs_engine)
+        engine_menu.addAction(self.play_vs_engine_action)
+        
+        # Avatar menu
+        avatar_menu = menubar.addMenu("Avatar")
+        
+        create_avatar_action = QAction("🤖 Créer un Avatar IA...", self)
+        create_avatar_action.setShortcut("Ctrl+Shift+A")
+        create_avatar_action.triggered.connect(self.create_avatar)
+        avatar_menu.addAction(create_avatar_action)
+        
+        manage_avatars_action = QAction("📁 Gérer les Avatars...", self)
+        manage_avatars_action.triggered.connect(self.manage_avatars)
+        avatar_menu.addAction(manage_avatars_action)
+        
+        # Note: "Arrêter l'Avatar" a été supprimé car maintenant géré via "Nouvelle partie" et "Abandonner"
+        
+    def apply_theme(self):
+        """Apply the dark theme to the application"""
+        self.setStyleSheet(get_scaled_theme())
+        
+    def setup_engine_signals(self):
+        """Setup engine manager signals"""
+        self.engine_manager.engine_started.connect(self.on_engine_started)
+        self.engine_manager.engine_stopped.connect(self.on_engine_stopped)
+        self.engine_manager.engine_error.connect(self.on_engine_error)
+        self.engine_manager.analysis_updated.connect(self.on_analysis_updated)
+        self.engine_manager.move_ready.connect(self.on_engine_move_ready)  # Engine vs mode
+        
+        # Avatar engine signals
+        self.avatar_engine_manager.avatar_started.connect(self.on_avatar_started)
+        self.avatar_engine_manager.avatar_stopped.connect(self.on_avatar_stopped)
+        self.avatar_engine_manager.avatar_error.connect(self.on_avatar_error)
+        self.avatar_engine_manager.move_ready.connect(self.on_avatar_move_ready)  # Avatar vs mode
+    
+    def auto_start_engine(self):
+        """Automatically start the first available engine at startup"""
+        print("DEBUG: auto_start_engine VRAIMENT appele")
+        print("DEBUG: auto_start_engine appelé")
+        engines = self.engine_manager.get_engines()
+        print(f"DEBUG: Moteurs trouvés: {len(engines)}")
+        
+        if engines:
+            # Start the first engine automatically
+            print(f"DEBUG: Démarrage du moteur {engines[0].name}")
+            self.start_engine(engines[0].name)
+        else:
+            # Show helpful message
+            print("DEBUG: Aucun moteur trouvé")
+            self.engine_panel.set_engine_status("Non configuré")
+            self.engine_panel.engine_status.setStyleSheet("color: #ff6b6b; font-size: 9pt;")
+            self.statusBar().showMessage(
+                "💡 Configurez un moteur: Menu → Moteur → Configuration des moteurs", 
+                10000
+            )
+        
+    def on_move_made(self, from_square: int, to_square: int):
+        """Handle move made on the board"""
+        # Check if it's player's turn when playing vs engine
+        if self.play_mode == "vs_engine":
+            if self.waiting_for_engine:
+                self.statusBar().showMessage("Attendez que le moteur joue!", 2000)
+                self.chessboard.set_board(self.game.board)
+                return
+            # Check if it's the player's turn
+            if self.game.board.turn != self.player_color:
+                # Cancel the move
+                self.chessboard.set_board(self.game.board)
+                self.statusBar().showMessage("Ce n'est pas votre tour !", 2000)
+                return
+        
+        # Check if it's player's turn when playing vs avatar
+        if self.play_mode == "vs_avatar":
+            # Check if it's the player's turn
+            if self.game.board.turn != self.player_color:
+                # Cancel the move
+                self.chessboard.set_board(self.game.board)
+                self.statusBar().showMessage("Ce n'est pas votre tour !", 2000)
+                return
+        
+        # Create move
+        move = chess.Move(from_square, to_square)
+        
+        # Check if it's a pawn promotion
+        piece = self.game.board.piece_at(from_square)
+        if piece and piece.piece_type == chess.PAWN:
+            if chess.square_rank(to_square) in [0, 7]:
+                move = chess.Move(from_square, to_square, chess.QUEEN)
+        
+        # Make the move
+        if self.game.make_move(move):
+            # Auto-start clock after first White move
+            if not self.clock_started and len(self.game.board.move_stack) == 1:
+                print("DEBUG: Premier coup des Blancs - démarrage de la pendule")
+                self.clock_widget.start()
+                self.clock_started = True
+            
+            # Switch clock if active
+            if self.clock_widget.timer.isActive():
+                self.clock_widget.switch_clock()
+            
+            # Update notation panel
+            pgn_text = self.game.get_pgn_moves()
+            self.notation_panel.update_moves(pgn_text)
+            
+            # Play appropriate sound
+            if self.game.board.is_capture(move):
+                self.sound_manager.play_capture()
+            elif self.game.board.is_castling(move):
+                self.sound_manager.play_castle()
+            elif self.game.board.is_check():
+                self.sound_manager.play_check()
+            else:
+                self.sound_manager.play_move()
+            
+            # Update the board display
+            self.chessboard.set_board(self.game.board)
+            
+            # Update notation
+            pgn_text = self.game.get_pgn_moves()
+            self.notation_panel.update_moves(pgn_text)
+            
+            # Update status bar
+            if self.game.is_game_over():
+                result = self.game.get_result()
+                reason = self.get_game_over_reason()
+                self.statusBar().showMessage(f"Partie terminée - {result}")
+                self.notation_panel.set_game_info(f"Partie terminée - {result}")
+                self.sound_manager.play_game_end()
+                # Stop engine analysis
+                if self.engine_manager.is_analyzing:
+                    self.engine_manager.stop_analysis()
+                # Stop avatar game
+                if self.playing_vs_avatar:
+                    self.playing_vs_avatar = False
+                # Stop vs engine game
+                if self.play_mode == "vs_engine":
+                    self.play_mode = "free"
+                    self.play_vs_engine_action.setChecked(False)
+                    self.waiting_for_engine = False
+                # Show game over dialog
+                self.show_game_over_dialog(result, reason)
+            else:
+                # Check if king is in check
+                if self.game.board.is_check():
+                    self.sound_manager.play_check()
+                
+                turn = "Trait aux blancs" if self.game.board.turn == chess.WHITE else "Trait aux noirs"
+                self.statusBar().showMessage(turn)
+                
+                # Auto-analyze if engine is running
+                if self.engine_manager.is_engine_running() and self.engine_panel.is_analyzing:
+                    self.request_analysis()
+                
+                # Trigger engine move if playing vs engine
+                if self.play_mode == "vs_engine" and not self.game.board.is_game_over():
+                    self.request_engine_move()
+                
+                # Trigger avatar move if playing vs avatar
+                if self.play_mode == "vs_avatar" and not self.game.board.is_game_over():
+                    self.request_avatar_move()
+                
+            # Switch clock
+            if self.clock_widget.timer.isActive():
+                self.clock_widget.switch_clock()
+                
+    def new_game(self):
+        """Start a new game"""
+        # Get list of available avatars for dialog
+        avatars = self.avatar_manager.get_all_avatars()
+        avatar_available = len(avatars) > 0
+        
+        # Show configuration dialog
+        dialog = NewGameDialog(
+            engine_available=self.engine_manager.is_engine_running(),
+            avatar_available=avatar_available,
+            avatars=avatars,  # Pass avatar list
+            parent=self
+        )
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            config = dialog.get_config()
+            
+            # Stop any active avatar
+            if self.avatar_engine_manager.is_avatar_running():
+                self.avatar_engine_manager.stop_avatar()
+            
+            # Reset game
+            self.game.reset()
+            self.chessboard.set_board(self.game.board)
+            self.notation_panel.clear()
+            self.notation_panel.set_game_info("Nouvelle partie")
+            self.clock_widget.reset()
+            self.clock_started = False  # Reset clock flag
+            self.engine_panel.reset_analysis()
+            
+            # Apply time control if changed
+            if config['time_control']:
+                self.clock_widget.time_control_combo.setCurrentText(config['time_control'])
+            
+            # Configure mode
+            if config['mode'] == "vs_engine":
+                self.player_color = config['player_color']
+                self.play_mode = "vs_engine"
+                self.play_vs_engine_action.setChecked(True)
+                self.waiting_for_engine = False
+                self.playing_vs_avatar = False
+                
+                # Clear avatar status
+                self.avatar_status.clear_avatar()
+                
+                # Flip board if playing as Black
+                if self.player_color == chess.BLACK and not self.chessboard.flipped:
+                    self.chessboard.flip_board()
+                elif self.player_color == chess.WHITE and self.chessboard.flipped:
+                    self.chessboard.flip_board()
+                
+                # If Black, engine plays first
+                if self.player_color == chess.BLACK:
+                    self.chessboard.setEnabled(False)
+                    self.request_engine_move()
+                    self.statusBar().showMessage("Nouvelle partie contre le moteur - Le moteur réfléchit...", 5000)
+                else:
+                    self.chessboard.setEnabled(True)
+                    self.statusBar().showMessage(
+                        f"Nouvelle partie contre le moteur - Vous jouez les Blancs",
+                        5000
+                    )
+            elif config['mode'] == "vs_avatar":
+                # Avatar mode
+                avatar_id = config.get('avatar_id')
+                if not avatar_id:
+                    QMessageBox.warning(self, "Erreur", "Veuillez sélectionner un avatar")
+                    return
+                
+                self.player_color = config['player_color']
+                self.play_mode = "vs_avatar"
+                self.play_vs_engine_action.setChecked(False)
+                self.waiting_for_engine = False
+                self.playing_vs_avatar = True
+                self.avatar_id = avatar_id
+                
+                # Get avatar info
+                avatar = self.avatar_manager.get_avatar(avatar_id)
+                if not avatar:
+                    QMessageBox.warning(self, "Erreur", "Avatar non trouvé")
+                    return
+                
+                # Set avatar status display
+                self.avatar_status.set_avatar(avatar)
+                
+                # Get player style for avatar
+                player_style = self.avatar_manager.get_player_style(avatar_id)
+                if not player_style:
+                    QMessageBox.warning(self, "Erreur", "Style du joueur non disponible")
+                    return
+                
+                # Get Stockfish path
+                engines = self.engine_manager.get_engines()
+                stockfish = next((e for e in engines if 'stockfish' in e.name.lower()), None)
+                
+                if not stockfish:
+                    QMessageBox.warning(
+                        self,
+                        "Moteur Requis",
+                        "Veuillez d'abord configurer Stockfish dans\n"
+                        "Menu → Moteur → Configuration des moteurs"
+                    )
+                    return
+                
+                # Start avatar engine
+                print(f"DEBUG: Démarrage de l'avatar {avatar.display_name}")
+                self.avatar_engine_manager.start_avatar(avatar_id, stockfish.path, player_style)
+                
+                # Flip board if playing as Black
+                if self.player_color == chess.BLACK and not self.chessboard.flipped:
+                    self.chessboard.flip_board()
+                elif self.player_color == chess.WHITE and self.chessboard.flipped:
+                    self.chessboard.flip_board()
+                
+                # If Black, avatar plays first
+                if self.player_color == chess.BLACK:
+                    self.chessboard.setEnabled(False)
+                    # Request avatar move after a short delay (wait for engine to start)
+                    from PyQt6.QtCore import QTimer
+                    QTimer.singleShot(1000, lambda: self.request_avatar_move())
+                    self.statusBar().showMessage(f"Nouvelle partie contre {avatar.display_name} - L'avatar réfléchit...", 5000)
+                else:
+                    self.chessboard.setEnabled(True)
+                    self.statusBar().showMessage(
+                        f"Nouvelle partie contre {avatar.display_name} - Vous jouez les Blancs",
+                        5000
+                    )
+            else:
+                # Free mode
+                self.play_mode = "free"
+                self.play_vs_engine_action.setChecked(False)
+                self.waiting_for_engine = False
+                self.playing_vs_avatar = False
+                self.chessboard.setEnabled(True)
+                
+                # Clear avatar status
+                self.avatar_status.clear_avatar()
+                
+                # Reset board orientation to default (White at bottom)
+                if self.chessboard.flipped:
+                    self.chessboard.flip_board()
+                self.statusBar().showMessage("Nouvelle partie - Mode libre", 3000)
+            
+    def open_pgn(self):
+        """Open PGN file"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Ouvrir un fichier PGN",
+            "",
+            "Fichiers PGN (*.pgn);;Tous les fichiers (*.*)"
+        )
+        
+        if file_path:
+            game = self.pgn_manager.import_game(file_path)
+            if game:
+                # Get moves from game
+                moves = self.pgn_manager.game_to_move_list(game)
+                game_info = self.pgn_manager.get_game_info(game)
+                
+                # Reset board and replay moves
+                self.game.reset()
+                self.chessboard.set_board(self.game.board)
+                
+                # Apply moves
+                for move_san in moves:
+                    try:
+                        move = self.game.board.parse_san(move_san)
+                        self.game.make_move(move)
+                    except:
+                        break
+                        
+                # Update display
+                self.chessboard.set_board(self.game.board)
+                pgn_text = self.game.get_pgn_moves()
+                self.notation_panel.update_moves(pgn_text)
+                
+                # Show game info
+                info_text = f"{game_info['white']} vs {game_info['black']}\n"
+                info_text += f"{game_info['event']} - {game_info['date']}"
+                self.notation_panel.set_game_info(info_text)
+                
+                self.statusBar().showMessage(f"PGN chargé: {len(moves)} coups", 3000)
+            else:
+                QMessageBox.critical(self, "Erreur", "Impossible de charger le fichier PGN")
+        
+    def save_pgn(self):
+        """Save game as PGN"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Sauvegarder en PGN",
+            "",
+            "Fichiers PGN (*.pgn);;Tous les fichiers (*.*)"
+        )
+        
+        if file_path:
+            # Add .pgn extension if not present
+            if not file_path.endswith('.pgn'):
+                file_path += '.pgn'
+                
+            success = self.pgn_manager.export_game(
+                self.game.board,
+                self.game.move_history,
+                file_path,
+                white_player="Joueur 1",
+                black_player="Joueur 2",
+                result=self.game.board.result() if self.game.is_game_over() else "*"
+            )
+            
+            if success:
+                self.statusBar().showMessage(f"Partie sauvegardée: {file_path}", 3000)
+            else:
+                QMessageBox.critical(self, "Erreur", "Impossible de sauvegarder le fichier")
+        
+    def flip_board(self):
+        """Flip the board orientation"""
+        self.chessboard.flip_board()
+        
+    def copy_fen(self):
+        """Copy FEN to clipboard (placeholder)"""
+        from PyQt6.QtWidgets import QApplication
+        fen = self.game.board.fen()
+        QApplication.clipboard().setText(fen)
+        self.statusBar().showMessage(f"FEN copié: {fen}", 3000)
+        
+    def paste_fen(self):
+        """Paste FEN from clipboard (placeholder)"""
+        QMessageBox.information(
+            self,
+            "Coller FEN",
+            "Fonctionnalité à venir dans une prochaine version"
+        )
+        
+    def undo_move(self):
+        """Undo the last move"""
+        if self.game.undo_move():
+            self.chessboard.set_board(self.game.board)
+            pgn_text = self.game.get_pgn_moves()
+            self.notation_panel.update_moves(pgn_text)
+            turn = "Trait aux blancs" if self.game.board.turn == chess.WHITE else "Trait aux noirs"
+            self.statusBar().showMessage(turn)
+            
+            # Re-analyze position if engine is analyzing
+            if self.engine_manager.is_analyzing:
+                self.request_analysis()
+                
+    def open_engine_config(self):
+        """Open engine configuration dialog"""
+        engines = self.engine_manager.get_engines()
+        dialog = EngineConfigDialog(engines, self)
+        dialog.engines_changed.connect(self.on_engines_changed)
+        
+        if dialog.exec():
+            # Update engines in manager
+            new_engines = dialog.get_engines()
+            self.engine_manager.engines = new_engines
+            self.update_engine_menu()
+            
+    def update_engine_menu(self):
+        """Update the engine selection menu"""
+        self.select_engine_menu.clear()
+        
+        engines = self.engine_manager.get_engines()
+        if not engines:
+            no_engine_action = QAction("Aucun moteur configuré", self)
+            no_engine_action.setEnabled(False)
+            self.select_engine_menu.addAction(no_engine_action)
+        else:
+            for engine in engines:
+                action = QAction(engine.name, self)
+                action.triggered.connect(lambda checked, name=engine.name: self.select_engine(name))
+                self.select_engine_menu.addAction(action)
+                
+    def on_engines_changed(self):
+        """Handle engines list change"""
+        self.update_engine_menu()
+        
+    def select_engine(self, engine_name: str):
+        """Select and start an engine"""
+        self.start_engine(engine_name)
+        
+    def start_engine(self, engine_name: str = None):
+        """Start the selected engine"""
+        print(f"DEBUG: start_engine appelé avec engine_name={engine_name}")
+        
+        if engine_name is None:
+            # Get first available engine
+            engines = self.engine_manager.get_engines()
+            if not engines:
+                QMessageBox.warning(
+                    self,
+                    "Aucun moteur",
+                    "Veuillez d'abord configurer un moteur d'échecs."
+                )
+                return
+            engine_name = engines[0].name
+        
+        print(f"DEBUG: Appel de engine_manager.start_engine({engine_name})")
+        self.engine_manager.start_engine(engine_name)
+        self.statusBar().showMessage(f"Démarrage du moteur {engine_name}...", 3000)
+        
+    def stop_engine(self):
+        """Stop the current engine"""
+        if self.engine_manager.is_engine_running():
+            engine_name = self.engine_manager.get_active_engine_name()
+            self.engine_manager.stop_engine()
+            self.statusBar().showMessage(f"Moteur {engine_name} arrêté", 3000)
+    
+    def toggle_play_vs_engine(self, checked: bool):
+        """Toggle play vs engine mode"""
+        if checked:
+            # Check if engine is running
+            if not self.engine_manager.is_engine_running():
+                QMessageBox.warning(
+                    self,
+                    "Moteur non démarré",
+                    "Veuillez d'abord démarrer un moteur pour jouer contre lui."
+                )
+                self.play_vs_engine_action.setChecked(False)
+                return
+            
+            # Ask player to choose color
+            from PyQt6.QtWidgets import QInputDialog
+            items = ["Blancs", "Noirs"]
+            item, ok = QInputDialog.getItem(
+                self, 
+                "Choisir votre couleur",
+                "Avec quelle couleur voulez-vous jouer ?",
+                items, 
+                0, 
+                False
+            )
+            
+            if ok and item:
+                self.player_color = chess.WHITE if item == "Blancs" else chess.BLACK
+                self.play_mode = "vs_engine"
+                self.waiting_for_engine = False
+                
+                print(f"DEBUG: player_color défini à {self.player_color}")
+                print(f"DEBUG: Mode vs_engine activé")
+                
+                # Auto-flip board based on player color
+                if self.player_color == chess.BLACK and not self.chessboard.flipped:
+                    print(f"DEBUG: Flip board (Noirs en bas)")
+                    self.chessboard.flip_board()
+                elif self.player_color == chess.WHITE and self.chessboard.flipped:
+                    print(f"DEBUG: Flip board (Blancs en bas)")
+                    self.chessboard.flip_board()
+                
+                # Start new game
+                self.new_game()
+                print(f"DEBUG: Nouveau jeu démarré, turn={self.game.board.turn}")
+                
+                # If player chose black, engine plays first
+                if self.player_color == chess.BLACK:
+                    print(f"DEBUG: Appel request_engine_move (moteur joue Blancs)")
+                    # Disable board interaction until engine plays
+                    self.chessboard.setEnabled(False)
+                    self.statusBar().showMessage("Le moteur joue en premier...", 0)
+                    self.request_engine_move()
+                else:
+                    self.statusBar().showMessage("Mode: Jouer contre le moteur - À vous de jouer!", 3000)
+            else:
+                self.play_vs_engine_action.setChecked(False)
+        else:
+            # Disable vs engine mode
+            self.play_mode = "free"
+            self.waiting_for_engine = False
+            self.statusBar().showMessage("Mode libre activé", 2000)
+    
+    def request_engine_move(self):
+        """Request and play engine's move"""
+        if not self.engine_manager.is_engine_running():
+            self.statusBar().showMessage("Moteur non disponible", 2000)
+            return
+        
+        self.waiting_for_engine = True
+        self.statusBar().showMessage("Stockfish réfléchit...", 0)
+        
+        # Request best move from engine
+        # The move_ready signal will be emitted automatically
+        self.engine_manager.get_best_move(self.game.board, time_limit=2.0)
+    
+    def request_avatar_move(self):
+        """Request and play avatar's move"""
+        if not self.avatar_engine_manager.is_avatar_running():
+            self.statusBar().showMessage("Avatar non disponible", 2000)
+            return
+        
+        # Disable board while avatar is thinking
+        self.chessboard.setEnabled(False)
+        
+        # Get avatar info for display
+        avatar = self.avatar_manager.get_avatar(self.avatar_id)
+        avatar_name = avatar.display_name if avatar else "Avatar"
+        
+        self.statusBar().showMessage(f"{avatar_name} réfléchit...", 0)
+        
+        # Request best move from avatar
+        # The move_ready signal will be emitted automatically
+        self.avatar_engine_manager.request_move(self.game.board, time_limit=2.0)
+    
+    def on_engine_move_ready(self, move):
+        """Handle engine move result (called from signal, thread-safe)"""
+        print(f"DEBUG: on_engine_move_ready appelé avec move={move}")
+        
+        if not move:
+            self.waiting_for_engine = False
+            # Re-enable board if it was disabled
+            self.chessboard.setEnabled(True)
+            self.statusBar().showMessage("Erreur: coup invalide", 2000)
+            return
+        
+        try:
+            # Play the move on the board
+            if self.game.make_move(move):
+                # Update notation panel
+                pgn_text = self.game.get_pgn_moves()
+                self.notation_panel.update_moves(pgn_text)
+                
+                # Play appropriate sound
+                if self.game.board.is_capture(move):
+                    self.sound_manager.play_capture()
+                elif self.game.board.is_castling(move):
+                    self.sound_manager.play_castle()
+                elif self.game.board.is_check():
+                    self.sound_manager.play_check()
+                else:
+                    self.sound_manager.play_move()
+                
+                # Update the board display
+                self.chessboard.set_board(self.game.board)
+                
+                # Re-enable board interaction after engine move
+                self.chessboard.setEnabled(True)
+                print(f"DEBUG: Échiquier réactivé, turn={self.game.board.turn}")
+                
+                # Check game over
+                if self.game.is_game_over():
+                    result = self.game.get_result()
+                    reason = self.get_game_over_reason()
+                    self.statusBar().showMessage(f"Partie terminée - {result}")
+                    self.notation_panel.set_game_info(f"Partie terminée - {result}")
+                    self.sound_manager.play_game_end()
+                    self.play_mode = "free"
+                    self.play_vs_engine_action.setChecked(False)
+                    # Show game over dialog
+                    self.show_game_over_dialog(result, reason)
+                else:
+                    self.statusBar().showMessage(f"Stockfish joue : {move.uci()} - À vous de jouer!", 3000)
+        except Exception as e:
+            print(f"ERROR: Engine move failed: {e}")
+            import traceback
+            traceback.print_exc()
+            self.statusBar().showMessage("Erreur du moteur", 3000)
+            # Re-enable board on error
+            self.chessboard.setEnabled(True)
+        finally:
+            self.waiting_for_engine = False
+        
+    def on_engine_started(self, engine_name: str):
+        """Handle engine started signal"""
+        print(f"DEBUG: MainWindow.on_engine_started appelé avec engine_name={engine_name}")
+        
+        # Get UCI options from the active engine
+        active_engine = self.engine_manager.active_engine
+        uci_options = active_engine.options if active_engine else None
+        
+        print(f"DEBUG: Active engine: {active_engine.name if active_engine else 'None'}")
+        print(f"DEBUG: UCI options: {uci_options}")
+        
+        # Update engine panel with status and UCI options
+        print(f"DEBUG: Appel de engine_panel.set_engine_status({engine_name}, {uci_options})")
+        self.engine_panel.set_engine_status(engine_name, uci_options)
+        print(f"DEBUG: engine_panel.set_engine_status terminé")
+        
+        self.statusBar().showMessage(f"Moteur {engine_name} prêt", 3000)
+        print(f"DEBUG: on_engine_started terminé")
+        
+    def on_engine_stopped(self):
+        """Handle engine stopped signal"""
+        self.engine_panel.clear_engine_status()
+    
+    def on_avatar_started(self, avatar_name: str):
+        """Handle avatar engine started signal"""
+        print(f"DEBUG: MainWindow.on_avatar_started - Avatar {avatar_name} démarré")
+        self.statusBar().showMessage(f"Avatar {avatar_name} prêt - À vous de jouer!", 3000)
+    
+    def on_avatar_stopped(self):
+        """Handle avatar engine stopped signal"""
+        print("DEBUG: MainWindow.on_avatar_stopped - Avatar arrêté")
+        self.statusBar().showMessage("Avatar arrêté", 2000)
+    
+    def on_avatar_error(self, error_msg: str):
+        """Handle avatar engine error"""
+        print(f"ERROR: MainWindow.on_avatar_error - {error_msg}")
+        QMessageBox.critical(self, "Erreur de l'avatar", error_msg)
+    
+    def on_avatar_move_ready(self, move):
+        """Handle avatar move result (called from signal, thread-safe)"""
+        print(f"DEBUG: on_avatar_move_ready appelé avec move={move}")
+        
+        if not move:
+            self.chessboard.setEnabled(True)
+            self.statusBar().showMessage("Erreur: l'avatar n'a pas pu jouer", 2000)
+            return
+        
+        try:
+            # Play the move on the board
+            if self.game.make_move(move):
+                # Update notation panel
+                pgn_text = self.game.get_pgn_moves()
+                self.notation_panel.update_moves(pgn_text)
+                
+                # Switch clock
+                if self.clock_widget.timer.isActive():
+                    self.clock_widget.switch_clock()
+                
+                # Play appropriate sound
+                if self.game.board.is_capture(move):
+                    self.sound_manager.play_capture()
+                elif self.game.board.is_castling(move):
+                    self.sound_manager.play_castle()
+                elif self.game.board.is_check():
+                    self.sound_manager.play_check()
+                else:
+                    self.sound_manager.play_move()
+                
+                # Update the board display
+                self.chessboard.set_board(self.game.board)
+                
+                # Re-enable board interaction after avatar move
+                self.chessboard.setEnabled(True)
+                print(f"DEBUG: Échiquier réactivé, turn={self.game.board.turn}")
+                
+                # Check game over
+                if self.game.is_game_over():
+                    result = self.game.get_result()
+                    reason = self.get_game_over_reason()
+                    self.statusBar().showMessage(f"Partie terminée - {result}")
+                    self.notation_panel.set_game_info(f"Partie terminée - {result}")
+                    self.sound_manager.play_game_end()
+                    self.play_mode = "free"
+                    self.playing_vs_avatar = False
+                    # Show game over dialog
+                    self.show_game_over_dialog(result, reason)
+                else:
+                    avatar = self.avatar_manager.get_avatar(self.avatar_id)
+                    avatar_name = avatar.display_name if avatar else "Avatar"
+                    self.statusBar().showMessage(f"{avatar_name} joue : {move.uci()} - À vous de jouer!", 3000)
+        except Exception as e:
+            print(f"ERROR: Avatar move failed: {e}")
+            import traceback
+            traceback.print_exc()
+            self.statusBar().showMessage("Erreur de l'avatar", 3000)
+            # Re-enable board on error
+            self.chessboard.setEnabled(True)
+        
+    def on_engine_error(self, error_msg: str):
+        """Handle engine error"""
+        QMessageBox.critical(self, "Erreur du moteur", error_msg)
+        self.engine_panel.clear_engine_status()
+        
+    def on_analysis_updated(self, data: dict):
+        """Handle analysis update from engine"""
+        self.engine_panel.update_analysis(data)
+        
+    def on_engine_start_analysis(self):
+        """Handle start analysis from engine panel"""
+        print(f"DEBUG: on_engine_start_analysis - engine_running={self.engine_manager.is_engine_running()}")
+        
+        if not self.engine_manager.is_engine_running():
+            QMessageBox.information(
+                self,
+                "Moteur non demarre",
+                "Pour analyser, vous devez d'abord:\n\n"
+                "1. Configurer un moteur:\n"
+                "   Menu -> Moteur -> Configuration des moteurs...\n\n"
+                "2. Demarrer le moteur:\n"
+                "   Menu -> Moteur -> Demarrer le moteur (Ctrl+Shift+E)\n\n"
+                "Astuce: L'application demarre automatiquement\n"
+                "le premier moteur configure au lancement."
+            )
+            self.engine_panel._on_stop_clicked()
+            return
+        
+        print("DEBUG: Appel de request_analysis()")
+        self.request_analysis()
+        
+    def on_engine_stop_analysis(self):
+        """Handle stop analysis from engine panel"""
+        self.engine_manager.stop_analysis()
+        
+    def request_analysis(self):
+        """Request analysis of current position"""
+        print(f"DEBUG: request_analysis - board FEN: {self.game.board.fen()}")
+        self.engine_manager.analyze_position(
+            self.game.board,
+            multipv=3,  # Analyze top 3 moves
+            time_limit=2.0  # 2 seconds per position
+        )
+        print("DEBUG: analyze_position appele")
+        
+    # Avatar methods
+    def create_avatar(self):
+        """Open avatar creation dialog"""
+        dialog = AvatarCreationDialog(self.avatar_manager, self)
+        dialog.avatar_created.connect(self.on_avatar_created)
+        dialog.exec()
+        
+    def on_avatar_created(self, avatar_id: str):
+        """Handle new avatar creation"""
+        self.statusBar().showMessage(f"Avatar créé avec succès!", 3000)
+        
+    def manage_avatars(self):
+        """Open avatar management panel in a dialog"""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QPushButton
+        from ui.avatar_config_dialog import AvatarConfigDialog
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Gérer les Avatars")
+        dialog.setMinimumSize(800, 600)
+        
+        layout = QVBoxLayout(dialog)
+        avatar_panel = AvatarPanel(self.avatar_manager)
+        # When "Play" button is clicked, close this dialog and open NewGameDialog with avatar preselected
+        avatar_panel.avatar_selected.connect(lambda aid: self._start_game_with_avatar(aid, dialog))
+        avatar_panel.avatar_configure_requested.connect(lambda aid: self.configure_avatar(aid))
+        avatar_panel.create_avatar_requested.connect(lambda: self.create_avatar())
+        layout.addWidget(avatar_panel)
+        
+        close_button = QPushButton("Fermer")
+        close_button.clicked.connect(dialog.accept)
+        layout.addWidget(close_button)
+        
+        dialog.exec()
+    
+    def _start_game_with_avatar(self, avatar_id: str, manage_dialog):
+        """Start a new game with a specific avatar (called from avatar panel)"""
+        # Close the manage avatars dialog
+        if manage_dialog:
+            manage_dialog.accept()
+        
+        # Trigger new game which will open NewGameDialog
+        # User can then select vs_avatar mode and choose this avatar
+        self.new_game()
+        # Note: Ideally we'd preselect the avatar in NewGameDialog, but that requires
+        # passing avatar_id to NewGameDialog, which would require modifying its interface.
+        # For now, user needs to manually select the avatar from the dropdown.
+    
+    def configure_avatar(self, avatar_id: str):
+        """Open avatar configuration dialog"""
+        from ui.avatar_config_dialog import AvatarConfigDialog
+        
+        avatar = self.avatar_manager.get_avatar(avatar_id)
+        if not avatar:
+            QMessageBox.warning(self, "Erreur", "Avatar non trouvé")
+            return
+        
+        dialog = AvatarConfigDialog(avatar, self.avatar_manager, self)
+        dialog.exec()
+    
+    # Note: L'ancien système d'avatar (start_avatar_game, start_avatar_game_async, make_avatar_move, etc.)
+    # a été remplacé par le nouveau système utilisant AvatarEngineManager et intégré dans new_game()
+    # avec le mode "vs_avatar". Ces méthodes ont été supprimées pour éviter les conflits.
+    
+    def open_board_config(self):
+        """Open board configuration dialog"""
+        dialog = BoardConfigDialog(self.board_config, self)
+        dialog.config_changed.connect(self.on_board_config_changed)
+        dialog.exec()
+        
+    def on_board_config_changed(self, config: dict):
+        """Handle board configuration change"""
+        self.apply_board_config()
+        self.statusBar().showMessage("Configuration de l'échiquier mise à jour", 3000)
+        
+    def apply_board_config(self):
+        """Apply board configuration to chessboard"""
+        # Update colors
+        from PyQt6.QtGui import QColor
+        self.chessboard.light_square = QColor(self.board_config.get('light_square_color'))
+        self.chessboard.dark_square = QColor(self.board_config.get('dark_square_color'))
+        self.chessboard.highlight_color = QColor(self.board_config.get('highlight_color'))
+        self.chessboard.selected_color = QColor(self.board_config.get('selected_color'))
+        self.chessboard.legal_move_color = QColor(self.board_config.get('legal_move_color'))
+        
+        # Update square size
+        square_size = self.board_config.get('square_size')
+        self.chessboard.square_size = square_size
+        self.chessboard.board_size = square_size * 8
+        self.chessboard.setMinimumSize(self.chessboard.board_size + 60, self.chessboard.board_size + 60)
+        
+        # Update piece style (if needed for future ASCII implementation)
+        # self.chessboard.piece_style = self.board_config.get('piece_style')
+        
+        # Update sound settings
+        self.sound_manager.set_enabled(self.board_config.get('sounds_enabled'))
+        self.sound_manager.set_volume(self.board_config.get('sound_volume'))
+        
+        # Redraw board
+        self.chessboard.update()
+    
+    def get_game_over_reason(self) -> str:
+        """Determine the reason for game over"""
+        if self.game.board.is_checkmate():
+            return "Échec et mat"
+        elif self.game.board.is_stalemate():
+            return "Pat"
+        elif self.game.board.is_insufficient_material():
+            return "Matériel insuffisant"
+        elif self.game.board.is_fifty_moves():
+            return "Règle des 50 coups"
+        elif self.game.board.is_repetition():
+            return "Répétition de position"
+        else:
+            return "Partie terminée"
+    
+    def show_game_over_dialog(self, result: str, reason: str):
+        """Show game over dialog"""
+        print(f"DEBUG: show_game_over_dialog appelé")
+        print(f"DEBUG: result='{result}'")
+        print(f"DEBUG: reason='{reason}'")
+        
+        # Stop the clock when game ends
+        if self.clock_widget.timer.isActive():
+            self.clock_widget.pause()
+            print("DEBUG: Pendule arrêtée (partie terminée)")
+        
+        dialog = GameOverDialog(result, reason, self)
+        dialog.new_game_requested.connect(self.new_game)
+        dialog.exec()
+    
+    def on_time_expired(self, color: str):
+        """Handle time expiration"""
+        print(f"DEBUG: Temps écoulé pour {color}")
+        if color == 'white':
+            result = "0-1"
+            reason = "Temps écoulé pour les Blancs"
+        else:
+            result = "1-0"
+            reason = "Temps écoulé pour les Noirs"
+        
+        self.show_game_over_dialog(result, reason)
+        self.statusBar().showMessage(f"Temps écoulé ! {reason}", 5000)
+    
+    def resign_game(self):
+        """Handle resign button - player resigns"""
+        if self.game.board.is_game_over():
+            QMessageBox.information(self, "Partie terminée", "La partie est déjà terminée.")
+            return
+        
+        # Confirm resignation
+        reply = QMessageBox.question(
+            self,
+            "Confirmer l'abandon",
+            "Êtes-vous sûr de vouloir abandonner cette partie ?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # Determine who resigned (opposite of who's turn it is wins)
+            if self.game.board.turn == chess.WHITE:
+                result = "0-1"  # White resigns, Black wins
+                reason = "Abandon des Blancs"
+            else:
+                result = "1-0"  # Black resigns, White wins
+                reason = "Abandon des Noirs"
+            
+            # Update game state
+            self.statusBar().showMessage(f"Partie terminée - {reason}")
+            self.notation_panel.set_game_info(f"{reason} - {result}")
+            
+            # Stop analysis and games
+            if self.engine_manager.is_analyzing:
+                self.engine_manager.stop_analysis()
+            if self.playing_vs_avatar:
+                self.playing_vs_avatar = False
+            if self.play_mode == "vs_engine":
+                self.play_mode = "free"
+                self.play_vs_engine_action.setChecked(False)
+                self.waiting_for_engine = False
+            
+            # Show game over dialog
+            self.show_game_over_dialog(result, reason)
+    
+    def offer_draw(self):
+        """Handle draw offer button"""
+        if self.game.board.is_game_over():
+            QMessageBox.information(self, "Partie terminée", "La partie est déjà terminée.")
+            return
+        
+        # Confirm draw offer
+        message = "Voulez-vous proposer un match nul ?\n\n(En mode solo, cela accepte immédiatement la nulle)"
+        if self.play_mode == "vs_engine":
+            message = "Voulez-vous déclarer un match nul contre le moteur ?"
+        
+        reply = QMessageBox.question(
+            self,
+            "Proposer la nulle",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            result = "1/2-1/2"
+            reason = "Nulle par accord mutuel"
+            
+            # Update game state
+            self.statusBar().showMessage(f"Partie terminée - {reason}")
+            self.notation_panel.set_game_info(f"{reason} - {result}")
+            
+            # Stop analysis and games
+            if self.engine_manager.is_analyzing:
+                self.engine_manager.stop_analysis()
+            if self.playing_vs_avatar:
+                self.playing_vs_avatar = False
+            if self.play_mode == "vs_engine":
+                self.play_mode = "free"
+                self.play_vs_engine_action.setChecked(False)
+                self.waiting_for_engine = False
+            
+            # Show game over dialog
+            self.show_game_over_dialog(result, reason)
+    
+    def flip_board_manual(self):
+        """Manually flip the board"""
+        self.chessboard.flip_board()
+    
+    def closeEvent(self, event):
+        """Handle window close event"""
+        print("DEBUG: MainWindow.closeEvent appelé")
+        
+        # Stop avatar engine if running
+        if self.avatar_engine_manager.is_avatar_running():
+            print("DEBUG: Arrêt de l'avatar engine")
+            self.avatar_engine_manager.stop_avatar()
+        
+        # Stop main engine if running
+        if self.engine_manager.is_engine_running():
+            print("DEBUG: Arrêt du moteur principal")
+            self.engine_manager.stop_engine()
+        
+        # Accept the close event
+        event.accept()
+        print("DEBUG: Fenêtre fermée proprement")
+

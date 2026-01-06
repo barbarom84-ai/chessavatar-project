@@ -1,0 +1,81 @@
+{
+  "avatars": [
+    {
+      "id": "chesscom_fondueman",
+      "username": "FondueMan",
+      "platform": "chesscom",
+      "display_name": "FondueMan",
+      "photo_path": null,
+      "created_date": "2026-01-04T19:51:25.291267",
+      "last_played": "2026-01-05T20:17:33.885761",
+      "games_played": 16,
+      "style_data": {
+        "username": "FondueMan",
+        "platform": "Chess.com",
+        "total_games": 100,
+        "win_rate": 40.0,
+        "draw_rate": 4.0,
+        "loss_rate": 56.0,
+        "average_elo": 1955,
+        "top_openings_white": [
+          [
+            "Van-Geet-Opening-1...d5",
+            5
+          ],
+          [
+            "Queens-Pawn-Opening-Chigorin-Variation-2...Nf6-3.Nf3",
+            4
+          ],
+          [
+            "Closed-Sicilian-Defense-Traditional-Line-3.Nf3-g6",
+            3
+          ],
+          [
+            "Van-Geet-Opening-1...Nf6",
+            2
+          ],
+          [
+            "Nimzowitsch-Larsen-Attack-Indian-Variation-2.Bb2-e6",
+            2
+          ]
+        ],
+        "top_openings_black": [
+          [
+            "Alekhines-Defense-2.Nc3",
+            6
+          ],
+          [
+            "Alekhines-Defense-Two-Pawns-Attack-3...Nb6-4.d4",
+            5
+          ],
+          [
+            "Alekhines-Defense-Normal-Variation-3.d4-Nb6-4.Nf3",
+            3
+          ],
+          [
+            "Indian-Game-2.e3",
+            2
+          ],
+          [
+            "Indian-Game-2.Bf4",
+            2
+          ]
+        ],
+        "average_game_length": 82.8,
+        "aggressive_score": 12.0,
+        "tactical_score": 39.6,
+        "positional_score": 88.0,
+        "white_win_rate": 43.1,
+        "black_win_rate": 36.7,
+        "preferred_time_control": "blitz",
+        "estimated_skill_level": 15,
+        "custom_config": {
+          "skill_level": 1,
+          "time_limit": 2.0,
+          "variance": 50,
+          "depth": 2
+        }
+      }
+    }
+  ]
+}

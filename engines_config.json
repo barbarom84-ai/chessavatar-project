@@ -1,0 +1,16 @@
+{
+  "engines": [
+    {
+      "name": "stockfish-windows-x86-64-avx2",
+      "path": "C:/Users/marco/Downloads/stockfish-windows-x86-64-avx2/stockfish/stockfish-windows-x86-64-avx2.exe",
+      "protocol": "UCI",
+      "options": {
+        "Threads": 1,
+        "Hash": 16,
+        "MultiPV": 1,
+        "Ponder": false,
+        "Skill Level": 1
+      }
+    }
+  ]
+}
