@@ -1011,8 +1011,11 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Moteur non disponible", 2000)
             return
         
+        # Get engine name for display
+        engine_name = self.engine_manager.get_active_engine_name() or "Moteur"
+        
         self.waiting_for_engine = True
-        self.statusBar().showMessage("Stockfish réfléchit...", 0)
+        self.statusBar().showMessage(f"⚙️ {engine_name} réfléchit...", 0)
         
         # Request best move from engine
         # The move_ready signal will be emitted automatically

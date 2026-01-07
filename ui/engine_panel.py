@@ -185,45 +185,88 @@ class EnginePanel(QWidget):
         main_layout.setSpacing(10)
         
         # Title and status
-        header_layout = QHBoxLayout()
+        header_layout = QVBoxLayout()  # Changed to vertical for better layout
+        header_layout.setSpacing(5)
+        
         title = QLabel("⚙ Moteur d'Analyse")
-        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        title.setStyleSheet("font-weight: bold; font-size: 13pt; color: #4FC3F7;")
         header_layout.addWidget(title)
         
         self.engine_status = QLabel("Aucun moteur")
-        self.engine_status.setStyleSheet("color: #888888; font-size: 9pt;")
+        self.engine_status.setStyleSheet("""
+            QLabel {
+                color: #888888; 
+                font-size: 10pt;
+                padding: 4px 8px;
+                background-color: #1e1e1e;
+                border-left: 3px solid #888888;
+                border-radius: 3px;
+            }
+        """)
         header_layout.addWidget(self.engine_status)
-        header_layout.addStretch()
+        
         main_layout.addLayout(header_layout)
         
         # UCI Configuration display
-        uci_layout = QHBoxLayout()
+        uci_group = QGroupBox("Configuration")
+        uci_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 10pt;
+                color: #d4d4d4;
+                border: 1px solid #3e3e3e;
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        uci_layout = QVBoxLayout(uci_group)
+        uci_layout.setSpacing(8)
         
-        # Threads group
-        threads_layout = QHBoxLayout()
-        threads_layout.setSpacing(5)
+        # Threads control row
+        threads_row = QHBoxLayout()
+        threads_row.setSpacing(8)
         
-        self.threads_label = QLabel("Threads: --")
-        self.threads_label.setStyleSheet("font-size: 8pt; color: #888888;")
-        threads_layout.addWidget(self.threads_label)
+        threads_label_static = QLabel("Threads:")
+        threads_label_static.setStyleSheet("font-size: 10pt; color: #d4d4d4; font-weight: bold;")
+        threads_row.addWidget(threads_label_static)
+        
+        self.threads_label = QLabel("--")
+        self.threads_label.setStyleSheet("""
+            QLabel {
+                font-size: 11pt;
+                color: #4FC3F7;
+                font-weight: bold;
+                padding: 2px 8px;
+                background-color: #1e1e1e;
+                border-radius: 3px;
+                min-width: 30px;
+            }
+        """)
+        threads_row.addWidget(self.threads_label)
         
         btn_style = """
             QPushButton {
                 background-color: #3e3e3e;
                 color: #d4d4d4;
                 border: 1px solid #555555;
-                border-radius: 2px;
-                min-width: 18px;
-                min-height: 18px;
-                max-width: 18px;
-                max-height: 18px;
-                font-size: 10pt;
+                border-radius: 3px;
+                min-width: 24px;
+                min-height: 24px;
+                max-width: 24px;
+                max-height: 24px;
+                font-size: 12pt;
                 font-weight: bold;
                 padding: 0px;
-                margin: 0px;
             }
             QPushButton:hover {
                 background-color: #4e4e4e;
+                border-color: #4FC3F7;
             }
             QPushButton:pressed {
                 background-color: #2e2e2e;
@@ -231,6 +274,7 @@ class EnginePanel(QWidget):
             QPushButton:disabled {
                 color: #555555;
                 background-color: #2a2a2a;
+                border-color: #333333;
             }
         """
         
@@ -239,24 +283,42 @@ class EnginePanel(QWidget):
         self.minus_thread_btn.setToolTip("Diminuer le nombre de threads")
         self.minus_thread_btn.clicked.connect(self._on_decrease_threads)
         self.minus_thread_btn.setEnabled(False)
-        threads_layout.addWidget(self.minus_thread_btn)
+        threads_row.addWidget(self.minus_thread_btn)
         
         self.plus_thread_btn = QPushButton("+")
         self.plus_thread_btn.setStyleSheet(btn_style)
         self.plus_thread_btn.setToolTip("Augmenter le nombre de threads")
         self.plus_thread_btn.clicked.connect(self._on_increase_threads)
         self.plus_thread_btn.setEnabled(False)
-        threads_layout.addWidget(self.plus_thread_btn)
+        threads_row.addWidget(self.plus_thread_btn)
         
-        uci_layout.addLayout(threads_layout)
-        uci_layout.addSpacing(15)
+        threads_row.addStretch()
+        uci_layout.addLayout(threads_row)
         
-        self.hash_label = QLabel("Hash: --")
-        self.hash_label.setStyleSheet("font-size: 8pt; color: #888888;")
-        uci_layout.addWidget(self.hash_label)
+        # Hash row
+        hash_row = QHBoxLayout()
+        hash_row.setSpacing(8)
         
-        uci_layout.addStretch()
-        main_layout.addLayout(uci_layout)
+        hash_label_static = QLabel("Hash:")
+        hash_label_static.setStyleSheet("font-size: 10pt; color: #d4d4d4; font-weight: bold;")
+        hash_row.addWidget(hash_label_static)
+        
+        self.hash_label = QLabel("--")
+        self.hash_label.setStyleSheet("""
+            QLabel {
+                font-size: 10pt;
+                color: #4FC3F7;
+                font-weight: bold;
+                padding: 2px 8px;
+                background-color: #1e1e1e;
+                border-radius: 3px;
+            }
+        """)
+        hash_row.addWidget(self.hash_label)
+        hash_row.addStretch()
+        uci_layout.addLayout(hash_row)
+        
+        main_layout.addWidget(uci_group)
         
         # Evaluation bar and PV container
         eval_container = QHBoxLayout()
@@ -284,18 +346,24 @@ class EnginePanel(QWidget):
         """)
         eval_info_layout.addWidget(self.eval_label)
         
-        # Analysis info
-        self.depth_label = QLabel("Profondeur: --")
-        self.depth_label.setStyleSheet("font-size: 9pt; color: #888888;")
-        eval_info_layout.addWidget(self.depth_label)
+        # Analysis info - more compact and cleaner
+        info_row = QHBoxLayout()
+        info_row.setSpacing(10)
+        
+        self.depth_label = QLabel("Prof: --")
+        self.depth_label.setStyleSheet("font-size: 10pt; color: #888888;")
+        info_row.addWidget(self.depth_label)
         
         self.nodes_label = QLabel("Nœuds: --")
-        self.nodes_label.setStyleSheet("font-size: 9pt; color: #888888;")
-        eval_info_layout.addWidget(self.nodes_label)
+        self.nodes_label.setStyleSheet("font-size: 10pt; color: #888888;")
+        info_row.addWidget(self.nodes_label)
         
         self.nps_label = QLabel("N/s: --")
-        self.nps_label.setStyleSheet("font-size: 9pt; color: #888888;")
-        eval_info_layout.addWidget(self.nps_label)
+        self.nps_label.setStyleSheet("font-size: 10pt; color: #888888;")
+        info_row.addWidget(self.nps_label)
+        
+        info_row.addStretch()
+        eval_info_layout.addLayout(info_row)
         
         eval_info_layout.addStretch()
         eval_container.addLayout(eval_info_layout, stretch=1)
@@ -323,8 +391,18 @@ class EnginePanel(QWidget):
         
     def set_engine_status(self, engine_name: str, uci_options: Optional[Dict] = None):
         """Set engine status and UCI parameters"""
-        self.engine_status.setText(f"Moteur: {engine_name}")
-        self.engine_status.setStyleSheet("color: #00ff00; font-size: 9pt;")
+        self.engine_status.setText(f"🔹 {engine_name}")
+        self.engine_status.setStyleSheet("""
+            QLabel {
+                color: #4FC3F7; 
+                font-size: 10pt;
+                font-weight: bold;
+                padding: 4px 8px;
+                background-color: #1e1e1e;
+                border-left: 3px solid #4FC3F7;
+                border-radius: 3px;
+            }
+        """)
         self.analyze_button.setEnabled(True)
         
         # Display UCI parameters
@@ -338,14 +416,14 @@ class EnginePanel(QWidget):
             except (ValueError, TypeError):
                 self.current_threads = 1
                 
-            self.threads_label.setText(f"Threads: {self.current_threads}")
-            self.hash_label.setText(f"Hash: {hash_mb} MB")
+            self.threads_label.setText(f"{self.current_threads}")
+            self.hash_label.setText(f"{hash_mb} MB")
             
             self.minus_thread_btn.setEnabled(True)
             self.plus_thread_btn.setEnabled(True)
         else:
-            self.threads_label.setText("Threads: --")
-            self.hash_label.setText("Hash: --")
+            self.threads_label.setText("--")
+            self.hash_label.setText("--")
             self.minus_thread_btn.setEnabled(False)
             self.plus_thread_btn.setEnabled(False)
         
