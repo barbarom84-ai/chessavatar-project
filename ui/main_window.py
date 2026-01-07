@@ -1740,12 +1740,6 @@ class MainWindow(QMainWindow):
                         f"Note: L'extraction des textures depuis les fichiers .dat\n"
                         f"sera implémentée dans la prochaine version."
                     )
-        
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            theme = dialog.get_selected_theme()
-            piece_set = dialog.get_selected_piece_set()
-            self.on_theme_changed(theme, piece_set)
-            self.statusBar().showMessage(f"Thème appliqué: {theme} avec pièces {piece_set}", 3000)
     
     def on_theme_changed(self, theme_name: str, piece_set: str):
         """Handle theme and piece set changes"""
