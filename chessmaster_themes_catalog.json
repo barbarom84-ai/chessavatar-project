@@ -1,0 +1,442 @@
+[
+  {
+    "id": "staunton_wood",
+    "name": "Staunton Wood",
+    "category": "wood",
+    "description": "Classic Staunton design in wood",
+    "dat_file": "A0R_Staunton Wood.dat",
+    "preview": "Staunton Wood.bmp"
+  },
+  {
+    "id": "classic_wood",
+    "name": "Classic Wood",
+    "category": "wood",
+    "description": "Traditional wooden pieces",
+    "dat_file": "A0R_Classic wood.dat",
+    "preview": "Classic wood.bmp"
+  },
+  {
+    "id": "classic_old_wood",
+    "name": "Classic Old Wood",
+    "category": "wood",
+    "description": "Antique wooden pieces",
+    "dat_file": "A0R_Classic old wood.dat",
+    "preview": "Classic old wood.bmp"
+  },
+  {
+    "id": "indian_wood",
+    "name": "Indian Wood",
+    "category": "wood",
+    "description": "Indian style wooden pieces",
+    "dat_file": "A0F_Indian wood.dat",
+    "preview": "Indian wood.bmp"
+  },
+  {
+    "id": "staunton_metal",
+    "name": "Staunton Metal",
+    "category": "metal",
+    "description": "Staunton design in metal",
+    "dat_file": "A2R_Staunton metal.dat",
+    "preview": "Staunton metal.bmp"
+  },
+  {
+    "id": "fancy_metal",
+    "name": "Fancy Metal",
+    "category": "metal",
+    "description": "Decorative metal pieces",
+    "dat_file": "A2R_Fancy metal.dat",
+    "preview": "Fancy metal.bmp"
+  },
+  {
+    "id": "irish_metal",
+    "name": "Irish Metal",
+    "category": "metal",
+    "description": "Irish style metal pieces",
+    "dat_file": "A2R_Irish metal.dat",
+    "preview": "Irish metal.bmp"
+  },
+  {
+    "id": "steel",
+    "name": "Steel",
+    "category": "metal",
+    "description": "Modern steel pieces",
+    "dat_file": "A2R_Steel.dat",
+    "preview": "Steel.bmp"
+  },
+  {
+    "id": "classic_metal",
+    "name": "Classic Metal",
+    "category": "metal",
+    "description": "Traditional metal pieces",
+    "dat_file": "A2R_Classic metal.dat",
+    "preview": "Classic metal.bmp"
+  },
+  {
+    "id": "anna_metal",
+    "name": "Anna Metal",
+    "category": "metal",
+    "description": "Anna design in metal",
+    "dat_file": "A2F_Anna metal.dat",
+    "preview": "Anna metal.bmp"
+  },
+  {
+    "id": "staunton_glass",
+    "name": "Staunton Glass",
+    "category": "glass",
+    "description": "Transparent glass Staunton",
+    "dat_file": "A3R_Staunton glass.dat",
+    "preview": "Staunton glass.bmp"
+  },
+  {
+    "id": "fancy_glass",
+    "name": "Fancy Glass",
+    "category": "glass",
+    "description": "Decorative glass pieces",
+    "dat_file": "A3R_Fancy glass.dat",
+    "preview": "Fancy glass.bmp"
+  },
+  {
+    "id": "irish_glass",
+    "name": "Irish Glass",
+    "category": "glass",
+    "description": "Irish style glass pieces",
+    "dat_file": "A3R_Irish glass.dat",
+    "preview": "Irish glass.bmp"
+  },
+  {
+    "id": "classic_glass",
+    "name": "Classic Glass",
+    "category": "glass",
+    "description": "Traditional glass pieces",
+    "dat_file": "A3F_Classic glass.dat",
+    "preview": "Classic glass.bmp"
+  },
+  {
+    "id": "indian_glass",
+    "name": "Indian Glass",
+    "category": "glass",
+    "description": "Indian style glass pieces",
+    "dat_file": "A3F_Indian glass.dat",
+    "preview": "Indian glass.bmp"
+  },
+  {
+    "id": "anna_glass",
+    "name": "Anna Glass",
+    "category": "glass",
+    "description": "Anna design in glass",
+    "dat_file": "A3F_Anna glass.dat",
+    "preview": "Anna glass.bmp"
+  },
+  {
+    "id": "staunton_marble",
+    "name": "Staunton Marble",
+    "category": "marble",
+    "description": "Marble Staunton pieces",
+    "dat_file": "A0R_Staunton marble.dat",
+    "preview": "Staunton marble.bmp"
+  },
+  {
+    "id": "irish_marble",
+    "name": "Irish Marble",
+    "category": "marble",
+    "description": "Irish style marble pieces",
+    "dat_file": "A0R_Irish marble.dat",
+    "preview": "Irish marble.bmp"
+  },
+  {
+    "id": "anna_marble",
+    "name": "Anna Marble",
+    "category": "marble",
+    "description": "Anna design in marble",
+    "dat_file": "A0F_Anna marble.dat",
+    "preview": "Anna marble.bmp"
+  },
+  {
+    "id": "fancy_ceramic",
+    "name": "Fancy Ceramic",
+    "category": "marble",
+    "description": "Decorative ceramic pieces",
+    "dat_file": "A0R_Fancy ceramic.dat",
+    "preview": "Fancy ceramic.bmp"
+  },
+  {
+    "id": "lewis",
+    "name": "Lewis Chessmen",
+    "category": "historic",
+    "description": "Iconic Viking chess pieces (12th century)",
+    "dat_file": "A0F_Lewis.dat",
+    "preview": "Lewis.bmp"
+  },
+  {
+    "id": "mongol",
+    "name": "Mongol",
+    "category": "historic",
+    "description": "Mongolian style pieces",
+    "dat_file": "A0F_Mongol.dat",
+    "preview": "Mongol.bmp"
+  },
+  {
+    "id": "calvert",
+    "name": "Calvert",
+    "category": "historic",
+    "description": "Calvert collection pieces",
+    "dat_file": "A0F_Calvert.dat",
+    "preview": "Calvert.bmp"
+  },
+  {
+    "id": "hos_zagreb",
+    "name": "HOS Zagreb",
+    "category": "historic",
+    "description": "House of Staunton Zagreb",
+    "dat_file": "A0F_HOS_Zagreb.dat",
+    "preview": "HOS_Zagreb.bmp"
+  },
+  {
+    "id": "hos_hastings",
+    "name": "HOS Hastings",
+    "category": "historic",
+    "description": "House of Staunton Hastings",
+    "dat_file": "A0F_HOS_Hastings.dat",
+    "preview": "HOS_Hastings.bmp"
+  },
+  {
+    "id": "hos_sultan",
+    "name": "HOS Sultan",
+    "category": "historic",
+    "description": "House of Staunton Sultan",
+    "dat_file": "A0F_HOS_Sultan.dat",
+    "preview": "HOS_Sultan.bmp"
+  },
+  {
+    "id": "hos_reykjavik",
+    "name": "HOS Reykjavik",
+    "category": "historic",
+    "description": "House of Staunton Reykjavik",
+    "dat_file": "A0F_HOS_Reykjavik.dat",
+    "preview": "HOS_Reykjavik.bmp"
+  },
+  {
+    "id": "hos_parthenon",
+    "name": "HOS Parthenon",
+    "category": "historic",
+    "description": "House of Staunton Parthenon",
+    "dat_file": "A0F_HOS_Parthenon.dat",
+    "preview": "HOS_Parthenon.bmp"
+  },
+  {
+    "id": "hos_morphy",
+    "name": "HOS Morphy",
+    "category": "historic",
+    "description": "House of Staunton Morphy",
+    "dat_file": "A0F_HOS_Morphy.dat",
+    "preview": "HOS_Morphy.bmp"
+  },
+  {
+    "id": "hos_marshall",
+    "name": "HOS Marshall",
+    "category": "historic",
+    "description": "House of Staunton Marshall",
+    "dat_file": "A0F_HOS_Marshall.dat",
+    "preview": "HOS_Marshall.bmp"
+  },
+  {
+    "id": "hos_capablanca",
+    "name": "HOS Capablanca",
+    "category": "historic",
+    "description": "House of Staunton Capablanca",
+    "dat_file": "A0F_HOS_Capablanca.dat",
+    "preview": "HOS_Capablanca.bmp"
+  },
+  {
+    "id": "hos_collector",
+    "name": "HOS Collector",
+    "category": "historic",
+    "description": "House of Staunton Collector",
+    "dat_file": "A0F_HOS_Collector.dat",
+    "preview": "HOS_Collector.bmp"
+  },
+  {
+    "id": "hos_calvert",
+    "name": "HOS Calvert",
+    "category": "historic",
+    "description": "House of Staunton Calvert",
+    "dat_file": "A0F_HOS_Calvert.dat",
+    "preview": "HOS_Calvert.bmp"
+  },
+  {
+    "id": "bauhaus",
+    "name": "Bauhaus",
+    "category": "modern",
+    "description": "Bauhaus design style",
+    "dat_file": "A2F_Bauhaus.dat",
+    "preview": "Bauhaus.bmp"
+  },
+  {
+    "id": "egypt",
+    "name": "Egyptian",
+    "category": "modern",
+    "description": "Ancient Egyptian theme",
+    "dat_file": "A2F_Egypt.dat",
+    "preview": "Egypt.bmp"
+  },
+  {
+    "id": "mechanica",
+    "name": "Mechanica",
+    "category": "modern",
+    "description": "Mechanical/industrial style",
+    "dat_file": "A2F_Mechanica.dat",
+    "preview": "Mechanica.bmp"
+  },
+  {
+    "id": "modern",
+    "name": "Modern",
+    "category": "modern",
+    "description": "Modern minimalist design",
+    "dat_file": "A3F_Modern.dat",
+    "preview": "Modern.bmp"
+  },
+  {
+    "id": "expert",
+    "name": "Expert",
+    "category": "2d",
+    "description": "Simple 2D expert board",
+    "dat_file": "B0_Expert.dat",
+    "preview": "Expert.bmp"
+  },
+  {
+    "id": "expert_ii",
+    "name": "Expert II",
+    "category": "2d",
+    "description": "Enhanced 2D expert board",
+    "dat_file": "B0_Expert II.dat",
+    "preview": "Expert II.bmp"
+  },
+  {
+    "id": "newspaper",
+    "name": "Newspaper",
+    "category": "2d",
+    "description": "Newspaper print style",
+    "dat_file": "B0_Newspaper.dat",
+    "preview": "Newspaper.bmp"
+  },
+  {
+    "id": "chalkboard",
+    "name": "Chalkboard",
+    "category": "2d",
+    "description": "Chalk on blackboard",
+    "dat_file": "B0_Chalkboard.dat",
+    "preview": "Chalkboard.bmp"
+  },
+  {
+    "id": "bw_wood",
+    "name": "B&W Wood",
+    "category": "2d",
+    "description": "Black and white wood texture",
+    "dat_file": "B0_B&W wood.dat",
+    "preview": "B&W wood.bmp"
+  },
+  {
+    "id": "bw_metal",
+    "name": "B&W Metal",
+    "category": "2d",
+    "description": "Black and white metal",
+    "dat_file": "B0_B&W metal.dat",
+    "preview": "B&W metal.bmp"
+  },
+  {
+    "id": "neon",
+    "name": "Neon",
+    "category": "2d",
+    "description": "Neon glow effect",
+    "dat_file": "B0_Neon.dat",
+    "preview": "Neon.bmp"
+  },
+  {
+    "id": "old_paper",
+    "name": "Old Paper",
+    "category": "2d",
+    "description": "Aged paper texture",
+    "dat_file": "B0_Old paper.dat",
+    "preview": "Old paper.bmp"
+  },
+  {
+    "id": "paint",
+    "name": "Paint",
+    "category": "2d",
+    "description": "Painted style",
+    "dat_file": "B0_Paint.dat",
+    "preview": "Paint.bmp"
+  },
+  {
+    "id": "stained_glass",
+    "name": "Stained Glass",
+    "category": "2d",
+    "description": "Stained glass window",
+    "dat_file": "B0_Stained glass.dat",
+    "preview": "Stained glass.bmp"
+  },
+  {
+    "id": "cartoon_2d",
+    "name": "Cartoon 2D",
+    "category": "2d",
+    "description": "Flat cartoon style",
+    "dat_file": "B0_Cartoon 2D.dat",
+    "preview": "Cartoon 2D.bmp"
+  },
+  {
+    "id": "cartoon",
+    "name": "Cartoon 3D",
+    "category": "cartoon",
+    "description": "3D cartoon characters",
+    "dat_file": "A4_Cartoon.dat",
+    "preview": "Cartoon.bmp"
+  },
+  {
+    "id": "rubber",
+    "name": "Rubber",
+    "category": "cartoon",
+    "description": "Rubber toy pieces",
+    "dat_file": "C0_Rubber.dat",
+    "preview": "Rubber.bmp"
+  },
+  {
+    "id": "fairytale",
+    "name": "Fairytale",
+    "category": "cartoon",
+    "description": "Fairytale characters",
+    "dat_file": "C0_Fairytale.dat",
+    "preview": "Fairytale.bmp"
+  },
+  {
+    "id": "rabbids",
+    "name": "Raving Rabbids",
+    "category": "cartoon",
+    "description": "Ubisoft Raving Rabbids",
+    "dat_file": "C0_Raving Rabbids.dat",
+    "preview": "Raving Rabbids.bmp"
+  },
+  {
+    "id": "clash",
+    "name": "Clash",
+    "category": "cartoon",
+    "description": "Battle/clash theme",
+    "dat_file": "D4_Clash.dat",
+    "preview": "Clash.bmp"
+  },
+  {
+    "id": "staunton_official",
+    "name": "Staunton Official",
+    "category": "staunton",
+    "description": "Official tournament Staunton",
+    "dat_file": "A0R_Staunton official.dat",
+    "preview": "Staunton official.bmp"
+  },
+  {
+    "id": "staunton_official_ii",
+    "name": "Staunton Official II",
+    "category": "staunton",
+    "description": "Official Staunton variant",
+    "dat_file": "A0R_Staunton official II.dat",
+    "preview": "Staunton official II.bmp"
+  }
+]
