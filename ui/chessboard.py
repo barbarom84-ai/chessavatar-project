@@ -553,25 +553,3 @@ class ChessBoardWidget(QWidget):
             painter.setFont(font)
             text_rect = QRect(start_x, y, btn_size, btn_size)
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, icon)
-                move = legal_move
-                break
-                
-        if move:
-            # Handle pawn promotion - ask user
-            if move.promotion is None and self.board.piece_at(from_square).piece_type == chess.PAWN:
-                if chess.square_rank(to_square) in [0, 7]:
-                    # Show promotion dialog
-                    dialog = PromotionDialog(self)
-                    if dialog.exec():
-                        promotion_piece = dialog.get_selected_piece()
-                        move = chess.Move(from_square, to_square, promotion_piece)
-                    else:
-                        # User cancelled - default to queen
-                        move = chess.Move(from_square, to_square, chess.QUEEN)
-                    
-            self.move_made.emit(from_square, to_square)
-            
-        self.selected_square = None
-        self.legal_moves = []
-        self.update()
-

@@ -147,7 +147,7 @@ class MainWindow(QMainWindow):
         
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.engine_dock)
         
-        # ===== OPENING PANEL (Bottom, next to engine) =====
+        # ===== OPENING PANEL (Bottom, separate - NO TAB) =====
         self.opening_dock = QDockWidget("📖 Ouverture", self)
         self.opening_dock.setObjectName("OpeningDock")
         self.opening_dock.setAllowedAreas(
@@ -161,7 +161,8 @@ class MainWindow(QMainWindow):
         self.opening_dock.setWidget(self.opening_panel)
         
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.opening_dock)
-        self.tabifyDockWidget(self.engine_dock, self.opening_dock)  # Tab them together
+        # Split them horizontally (side by side, not tabbed)
+        self.splitDockWidget(self.engine_dock, self.opening_dock, Qt.Orientation.Horizontal)
         
         # ===== NOTATION PANEL (Right) =====
         self.notation_dock = QDockWidget("📝 Notation", self)
@@ -193,6 +194,8 @@ class MainWindow(QMainWindow):
         self.avatar_dock.setWidget(self.avatar_status)
         
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.avatar_dock)
+        # Split vertically to stack them
+        self.splitDockWidget(self.notation_dock, self.avatar_dock, Qt.Orientation.Vertical)
         
         # ===== CLOCK WIDGET (Right, below notation) =====
         self.clock_dock = QDockWidget("⏱ Pendule", self)
@@ -209,6 +212,8 @@ class MainWindow(QMainWindow):
         self.clock_dock.setWidget(self.clock_widget)
         
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.clock_dock)
+        # Split from notation
+        self.splitDockWidget(self.notation_dock, self.clock_dock, Qt.Orientation.Vertical)
         
         # ===== GAME CONTROLS (Right, bottom) =====
         self.controls_dock = QDockWidget("🎮 Contrôles", self)
@@ -247,10 +252,21 @@ class MainWindow(QMainWindow):
         
         self.controls_dock.setWidget(game_controls_widget)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.controls_dock)
+        # Split from clock
+        self.splitDockWidget(self.clock_dock, self.controls_dock, Qt.Orientation.Vertical)
         
-        # Set initial visibility
-        self.engine_dock.show()
-        self.engine_dock.raise_()  # Bring engine tab to front
+        # Set minimum sizes for visibility
+        self.engine_dock.setMinimumHeight(200)
+        self.opening_dock.setMinimumHeight(200)
+        self.notation_dock.setMinimumHeight(150)
+        self.avatar_dock.setMinimumHeight(100)
+        self.clock_dock.setMinimumHeight(80)
+        self.controls_dock.setMinimumHeight(60)
+        
+        # Set initial sizes using resizeDocks (Qt 5.6+)
+        # Make all panels visible with reasonable proportions
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self._set_initial_dock_sizes)
         
     def create_menu_bar(self):
         """Create the application menu bar"""
@@ -1755,6 +1771,29 @@ class MainWindow(QMainWindow):
         dialog = AboutDialog(self)
         dialog.exec()
     
+    def _set_initial_dock_sizes(self):
+        """Set initial sizes for all docks to ensure balanced layout"""
+        # Get window dimensions
+        window_height = self.height()
+        window_width = self.width()
+        
+        # Bottom area: 25% of window height, split 50/50 between engine and opening
+        bottom_height = int(window_height * 0.25)
+        
+        # Right area: 30% of window width, split between 4 panels
+        right_width = int(window_width * 0.30)
+        right_panel_height = window_height // 4  # Equal split for 4 panels
+        
+        # Resize bottom docks
+        self.resizeDocks([self.engine_dock, self.opening_dock], 
+                        [bottom_height, bottom_height], 
+                        Qt.Orientation.Vertical)
+        
+        # Resize right docks  
+        self.resizeDocks([self.avatar_dock, self.notation_dock, self.clock_dock, self.controls_dock],
+                        [right_panel_height] * 4,
+                        Qt.Orientation.Vertical)
+    
     def _save_window_state(self):
         """Save window state (dock positions, sizes, etc.)"""
         import json
@@ -1811,14 +1850,21 @@ class MainWindow(QMainWindow):
         # Re-add to default positions
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.engine_dock)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.opening_dock)
-        self.tabifyDockWidget(self.engine_dock, self.opening_dock)
+        self.splitDockWidget(self.engine_dock, self.opening_dock, Qt.Orientation.Horizontal)
         
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.avatar_dock)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.notation_dock)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.avatar_dock)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.clock_dock)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.controls_dock)
         
-        self.engine_dock.raise_()
+        self.splitDockWidget(self.notation_dock, self.avatar_dock, Qt.Orientation.Vertical)
+        self.splitDockWidget(self.notation_dock, self.clock_dock, Qt.Orientation.Vertical)
+        self.splitDockWidget(self.clock_dock, self.controls_dock, Qt.Orientation.Vertical)
+        
+        # Reset sizes
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self._set_initial_dock_sizes)
+        
         self.statusBar().showMessage("Disposition réinitialisée !", 2000)
     
     def closeEvent(self, event):
