@@ -27,6 +27,7 @@ class NewGameDialog(QDialog):
         self.selected_engine_name = None  # Selected engine for vs_engine mode
         self.selected_white_engine_name = None  # For AI vs AI modes
         self.selected_black_engine_name = None  # For AI vs AI modes
+        self.selected_personality = None  # Chessmaster personality
         
         self.init_ui()
         self.apply_theme()
@@ -202,6 +203,55 @@ class NewGameDialog(QDialog):
         
         engine_layout.addWidget(self.engine_combo)
         
+        # Chessmaster Personality selection (for TheKing engine)
+        self.personality_label = QLabel("Personnalité Chessmaster:")
+        self.personality_label.setStyleSheet("color: #d4d4d4; font-size: 10pt; margin-top: 10px;")
+        engine_layout.addWidget(self.personality_label)
+        
+        self.personality_combo = QComboBox()
+        self.personality_combo.setMinimumHeight(30)
+        self.personality_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #1e1e1e;
+                color: #d4d4d4;
+                border: 1px solid #4FC3F7;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox::down-arrow {
+                image: url(down_arrow.png);
+                width: 12px;
+                height: 12px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #252526;
+                color: #d4d4d4;
+                selection-background-color: #4FC3F7;
+                selection-color: #1e1e1e;
+            }
+        """)
+        
+        # Load Chessmaster personalities
+        self._load_personalities()
+        
+        engine_layout.addWidget(self.personality_combo)
+        
+        # Personality description
+        self.personality_desc_label = QLabel("")
+        self.personality_desc_label.setWordWrap(True)
+        self.personality_desc_label.setStyleSheet("color: #888888; font-size: 9pt; padding: 5px; font-style: italic;")
+        engine_layout.addWidget(self.personality_desc_label)
+        
+        self.personality_combo.currentIndexChanged.connect(self.on_personality_changed)
+        
+        # Hide personality selection by default (only show for TheKing)
+        self.personality_label.setVisible(False)
+        self.personality_combo.setVisible(False)
+        self.personality_desc_label.setVisible(False)
+        
         # Engine info label
         self.engine_info_label = QLabel("")
         self.engine_info_label.setStyleSheet("color: #888888; font-size: 9pt; padding: 5px;")
@@ -338,9 +388,103 @@ class NewGameDialog(QDialog):
             self.selected_engine_name = engine.name
             protocol = engine.protocol if hasattr(engine, 'protocol') else 'UCI'
             self.engine_info_label.setText(f"Protocole: {protocol}")
+            
+            # Show/hide personality selection for TheKing engine
+            is_theking = "theking" in engine.name.lower() or protocol.lower() == "winboard"
+            self.personality_label.setVisible(is_theking)
+            self.personality_combo.setVisible(is_theking)
+            self.personality_desc_label.setVisible(is_theking)
+            
+            # Trigger personality description update
+            if is_theking:
+                self.on_personality_changed(self.personality_combo.currentIndex())
         else:
             self.selected_engine_name = None
             self.engine_info_label.setText("")
+            self.personality_label.setVisible(False)
+            self.personality_combo.setVisible(False)
+            self.personality_desc_label.setVisible(False)
+    
+    def _load_personalities(self):
+        """Load Chessmaster personalities"""
+        try:
+            from core.chessmaster_personalities import PersonalityManager
+            
+            manager = PersonalityManager("chessmaster_personalities.json")
+            personalities = manager.get_all_names()
+            
+            if not personalities:
+                self.personality_combo.addItem("Aucune personnalité disponible", None)
+                self.personality_combo.setEnabled(False)
+                return
+            
+            # Add categories
+            # 1. Legendary GMs
+            gm_personalities = sorted([p for p in personalities if "_GM" in p])
+            if gm_personalities:
+                self.personality_combo.addItem("=== GRANDS MAÎTRES LÉGENDAIRES ===", None)
+                for name in gm_personalities:
+                    display_name = name.replace("_GM", "").replace("_", " ")
+                    self.personality_combo.addItem(f"⭐ {display_name}", name)
+            
+            # 2. Style presets
+            style_presets = sorted([p for p in personalities if p in ["CM9_T05", "Default", "Aggressive", "Positional", "Tactical", "Solid", "Beginner_Friendly"]])
+            if style_presets:
+                self.personality_combo.addItem("", None)  # Separator
+                self.personality_combo.addItem("=== PRÉRÉGLAGES DE STYLE ===", None)
+                for name in style_presets:
+                    self.personality_combo.addItem(f"🎯 {name}", name)
+            
+            # 3. Chessmaster personalities (first 20 only to avoid clutter)
+            cm_personalities = sorted([p for p in personalities if "_GM" not in p and p not in style_presets])
+            if cm_personalities:
+                self.personality_combo.addItem("", None)  # Separator
+                self.personality_combo.addItem("=== CHESSMASTER (Top 20) ===", None)
+                for name in cm_personalities[:20]:
+                    self.personality_combo.addItem(f"🎮 {name}", name)
+            
+            # Set default to Fischer if available, otherwise first GM
+            default_personality = "Fischer_GM" if "Fischer_GM" in personalities else (gm_personalities[0] if gm_personalities else personalities[0])
+            default_index = self.personality_combo.findData(default_personality)
+            if default_index > 0:
+                self.personality_combo.setCurrentIndex(default_index)
+                
+        except Exception as e:
+            print(f"Error loading personalities: {e}")
+            self.personality_combo.addItem("Erreur de chargement", None)
+            self.personality_combo.setEnabled(False)
+    
+    def on_personality_changed(self, index):
+        """Handle personality selection change"""
+        personality_name = self.personality_combo.currentData()
+        
+        if not personality_name:
+            self.personality_desc_label.setText("")
+            self.selected_personality = None
+            return
+        
+        try:
+            from core.chessmaster_personalities import PersonalityManager
+            
+            manager = PersonalityManager("chessmaster_personalities.json")
+            personality = manager.get_personality(personality_name)
+            
+            if personality:
+                self.selected_personality = personality_name
+                # Display personality description with key stats
+                desc = f"{personality.description}\n"
+                desc += f"Force: {personality.strength}% | "
+                desc += f"Agressivité: {personality.attack_defense:+d} | "
+                desc += f"Aléatoire: {personality.randomness}%"
+                self.personality_desc_label.setText(desc)
+            else:
+                self.personality_desc_label.setText("")
+                self.selected_personality = None
+                
+        except Exception as e:
+            print(f"Error loading personality details: {e}")
+            self.personality_desc_label.setText("Erreur de chargement")
+            self.selected_personality = None
     
     def on_avatar_changed(self, index):
         """Handle avatar selection change"""
@@ -426,7 +570,8 @@ class NewGameDialog(QDialog):
             'time_control': time_control,
             'avatar_id': avatar_id,
             'avatar2_id': avatar2_id,  # NEW: Second avatar
-            'engine_name': engine_name  # NEW: Selected engine
+            'engine_name': engine_name,  # NEW: Selected engine
+            'personality': self.selected_personality  # NEW: Chessmaster personality
         }
     
     def apply_theme(self):

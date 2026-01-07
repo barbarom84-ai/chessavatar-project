@@ -15,15 +15,18 @@ class Avatar:
     """Data structure for an AI Avatar"""
     id: str
     username: str
-    platform: str  # 'lichess' or 'chesscom'
+    platform: str  # 'lichess' or 'chesscom' or 'chessmaster'
     display_name: str
     photo_path: Optional[str]
     created_date: str
     last_played: Optional[str]
     games_played: int
     
-    # Player style data
+    # Player style data (for online players) or Chessmaster personality
     style_data: Dict
+    
+    # Chessmaster personality name (if platform is 'chessmaster')
+    chessmaster_personality: Optional[str] = None
     
     def to_dict(self) -> Dict:
         """Convert to dictionary"""
@@ -59,19 +62,21 @@ class AvatarManager:
         self,
         username: str,
         platform: str,
-        player_style: PlayerStyle,
+        player_style: Optional[PlayerStyle] = None,
         display_name: Optional[str] = None,
-        photo_path: Optional[str] = None
+        photo_path: Optional[str] = None,
+        chessmaster_personality: Optional[str] = None
     ) -> Avatar:
         """
         Create a new avatar
         
         Args:
             username: Player's username
-            platform: Platform (lichess/chesscom)
-            player_style: Analyzed player style
+            platform: Platform (lichess/chesscom/chessmaster)
+            player_style: Analyzed player style (for online players)
             display_name: Custom display name
             photo_path: Path to profile photo
+            chessmaster_personality: Personality name (for Chessmaster avatars)
             
         Returns:
             Created Avatar object
@@ -83,6 +88,14 @@ class AvatarManager:
         avatar_photo_path = None
         if photo_path and Path(photo_path).exists():
             avatar_photo_path = self._save_photo(avatar_id, photo_path)
+        
+        # Style data - either from player analysis or empty for Chessmaster
+        style_data = {}
+        if player_style:
+            style_data = self._style_to_dict(player_style)
+        elif platform == 'chessmaster' and not chessmaster_personality:
+            # Default personality if none specified
+            chessmaster_personality = "Default"
             
         # Create avatar
         avatar = Avatar(
@@ -94,7 +107,8 @@ class AvatarManager:
             created_date=datetime.now().isoformat(),
             last_played=None,
             games_played=0,
-            style_data=self._style_to_dict(player_style)
+            style_data=style_data,
+            chessmaster_personality=chessmaster_personality
         )
         
         self.avatars.append(avatar)
@@ -106,7 +120,8 @@ class AvatarManager:
         self,
         avatar_id: str,
         display_name: Optional[str] = None,
-        photo_path: Optional[str] = None
+        photo_path: Optional[str] = None,
+        chessmaster_personality: Optional[str] = None
     ) -> bool:
         """
         Update an existing avatar
@@ -115,6 +130,7 @@ class AvatarManager:
             avatar_id: Avatar ID
             display_name: New display name
             photo_path: New photo path
+            chessmaster_personality: New Chessmaster personality name
             
         Returns:
             True if successful
@@ -135,6 +151,9 @@ class AvatarManager:
                     pass
             # Save new photo
             avatar.photo_path = self._save_photo(avatar_id, photo_path)
+        
+        if chessmaster_personality and avatar.platform == 'chessmaster':
+            avatar.chessmaster_personality = chessmaster_personality
             
         self.save_avatars()
         return True
@@ -193,13 +212,33 @@ class AvatarManager:
             avatar_id: Avatar ID
             
         Returns:
-            PlayerStyle object or None
+            PlayerStyle object or None (Chessmaster avatars return None)
         """
         avatar = self.get_avatar(avatar_id)
         if not avatar:
             return None
+        
+        # Chessmaster avatars don't have player style
+        if avatar.platform == 'chessmaster':
+            return None
             
         return self._dict_to_style(avatar.style_data)
+    
+    def get_chessmaster_personality(self, avatar_id: str) -> Optional[str]:
+        """
+        Get Chessmaster personality name from avatar
+        
+        Args:
+            avatar_id: Avatar ID
+            
+        Returns:
+            Personality name or None
+        """
+        avatar = self.get_avatar(avatar_id)
+        if not avatar or avatar.platform != 'chessmaster':
+            return None
+        
+        return avatar.chessmaster_personality
         
     def _generate_id(self, username: str, platform: str) -> str:
         """Generate unique avatar ID"""

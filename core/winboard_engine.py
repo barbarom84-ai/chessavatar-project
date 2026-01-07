@@ -9,6 +9,7 @@ import time
 import chess
 from typing import Optional, Callable, Dict, Any
 from PyQt6.QtCore import QObject, pyqtSignal
+from core.chessmaster_personalities import ChessmasterPersonality
 
 
 class WinboardEngine(QObject):
@@ -20,17 +21,19 @@ class WinboardEngine(QObject):
     error_occurred = pyqtSignal(str)  # Emits error message
     engine_ready = pyqtSignal(str)  # Emits engine name when ready
     
-    def __init__(self, engine_path: str, options: Dict[str, Any] = None):
+    def __init__(self, engine_path: str, options: Dict[str, Any] = None, personality: Optional[ChessmasterPersonality] = None):
         """
         Initialize WinBoard engine
         
         Args:
             engine_path: Path to engine executable
             options: Engine-specific options
+            personality: Chessmaster personality configuration (for TheKing)
         """
         super().__init__()
         self.engine_path = engine_path
         self.options = options or {}
+        self.personality = personality
         self.process: Optional[subprocess.Popen] = None
         self.output_thread: Optional[threading.Thread] = None
         self.is_running = False
@@ -85,6 +88,11 @@ class WinboardEngine(QObject):
             self._send_command("force")
             time.sleep(0.1)
             
+            # Apply Chessmaster personality if provided (for TheKing)
+            if self.personality:
+                print(f"DEBUG: Applying Chessmaster personality: {self.personality.name}")
+                self._apply_personality()
+            
             # Apply engine-specific options if available
             self._apply_options()
             
@@ -103,9 +111,40 @@ class WinboardEngine(QObject):
             self.error_occurred.emit(error_msg)
             return False
     
+    def _apply_personality(self):
+        """Apply Chessmaster personality configuration to TheKing engine"""
+        if not self.personality:
+            return
+        
+        # Get the cm_parm initialization string
+        cm_parm_commands = self.personality.to_cm_parm_string()
+        
+        # Send each command line by line
+        for cmd in cm_parm_commands.split('\n'):
+            if cmd.strip():
+                self._send_command(cmd.strip())
+                time.sleep(0.05)  # Small delay between commands
+        
+        print(f"DEBUG: Applied personality '{self.personality.name}'")
+    
+    def update_personality(self, personality: ChessmasterPersonality):
+        """
+        Update personality on the fly
+        
+        Args:
+            personality: New personality configuration
+        """
+        self.personality = personality
+        if self.is_running:
+            print(f"DEBUG: Updating to personality: {personality.name}")
+            # Enter force mode to avoid engine thinking during update
+            self._send_command("force")
+            time.sleep(0.05)
+            self._apply_personality()
+    
     def _apply_options(self):
         """Apply engine-specific options"""
-        # TheKing-specific options
+        # TheKing-specific options (legacy, prefer using personality)
         if "contempt" in self.options:
             self._send_command(f"option Contempt={self.options['contempt']}")
         
