@@ -114,17 +114,6 @@ class MainWindow(QMainWindow):
         )
         central_layout.addWidget(self.chessboard, stretch=10)
         
-        # Board control widget
-        self.board_control = BoardControlWidget()
-        self.board_control.zoom_in_clicked.connect(self.chessboard.zoom_in)
-        self.board_control.zoom_out_clicked.connect(self.chessboard.zoom_out)
-        self.board_control.zoom_reset_clicked.connect(self.chessboard.reset_zoom)
-        self.board_control.zoom_changed.connect(self.chessboard.set_zoom)
-        self.board_control.pan_mode_toggled.connect(self.chessboard.set_pan_mode)
-        self.board_control.pan_reset_clicked.connect(self.chessboard.reset_pan)
-        self.chessboard.zoom_changed.connect(self.board_control.update_zoom_display)
-        central_layout.addWidget(self.board_control, stretch=0)
-        
         # ===== DOCKABLE PANELS =====
         self._create_dock_widgets()
         
@@ -1390,6 +1379,11 @@ class MainWindow(QMainWindow):
     def on_analysis_updated(self, data: dict):
         """Handle analysis update from engine"""
         self.engine_panel.update_analysis(data)
+        
+        # Update integrated evaluation bar on chessboard
+        eval_cp = data.get('score_cp')
+        mate_in = data.get('score_mate')
+        self.chessboard.set_evaluation(eval_cp, mate_in)
         
     def on_engine_start_analysis(self):
         """Handle start analysis from engine panel"""

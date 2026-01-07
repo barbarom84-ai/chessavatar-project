@@ -67,6 +67,15 @@ class ChessBoardWidget(QWidget):
         self.pan_start_pos = QPoint()
         self.pan_start_offset = QPoint()
         
+        # Evaluation bar (integrated)
+        self.evaluation_cp = 0  # Centipawns (positive = white advantage)
+        self.evaluation_mate = None  # Mate in X moves
+        self.eval_bar_width = 20  # Width of evaluation bar
+        
+        # Control buttons visibility
+        self.controls_visible = False
+        self.control_button_size = 30
+        
         # Calculate margins based on resolution
         self.margin = self.res_mgr.get_margin(30)
         min_size = self.board_size + self.margin * 2
@@ -127,6 +136,27 @@ class ChessBoardWidget(QWidget):
         self.piece_set = piece_set
         self.update()
         
+    def set_evaluation(self, eval_cp: Optional[int] = None, mate_in: Optional[int] = None):
+        """
+        Set evaluation for the integrated eval bar
+        
+        Args:
+            eval_cp: Evaluation in centipawns (positive = white advantage)
+            mate_in: Mate in X moves (positive = white mates, negative = black mates)
+        """
+        if mate_in is not None:
+            self.evaluation_mate = mate_in
+            self.evaluation_cp = 0
+        else:
+            self.evaluation_cp = eval_cp if eval_cp is not None else 0
+            self.evaluation_mate = None
+        self.update()
+    
+    def set_controls_visible(self, visible: bool):
+        """Show/hide control buttons overlay"""
+        self.controls_visible = visible
+        self.update()
+    
     def set_pan_mode(self, enabled: bool):
         """Enable or disable pan mode"""
         self.pan_mode = enabled
@@ -210,6 +240,9 @@ class ChessBoardWidget(QWidget):
         """Paint the chess board"""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # ===== EVALUATION BAR (Left side, integrated) =====
+        self._draw_evaluation_bar(painter)
         
         # Draw board squares
         for square in chess.SQUARES:
@@ -398,6 +431,128 @@ class ChessBoardWidget(QWidget):
         move = None
         for legal_move in self.board.legal_moves:
             if legal_move.from_square == from_square and legal_move.to_square == to_square:
+                move = legal_move
+                break
+                
+        if move:
+            # Handle pawn promotion - ask user
+            if move.promotion is None and self.board.piece_at(from_square).piece_type == chess.PAWN:
+                if chess.square_rank(to_square) in [0, 7]:
+                    # Show promotion dialog
+                    dialog = PromotionDialog(self)
+                    if dialog.exec():
+                        promotion_piece = dialog.get_selected_piece()
+                        move = chess.Move(from_square, to_square, promotion_piece)
+                    else:
+                        # User cancelled - default to queen
+                        move = chess.Move(from_square, to_square, chess.QUEEN)
+                    
+            self.move_made.emit(from_square, to_square)
+            
+        self.selected_square = None
+        self.legal_moves = []
+        self.update()
+    
+    def _draw_evaluation_bar(self, painter: QPainter):
+        """Draw the evaluation bar on the left side of the board"""
+        # Bar position and size
+        bar_x = self.margin - self.eval_bar_width - 5
+        bar_y = self.margin + self.pan_offset.y()
+        bar_height = self.board_size
+        
+        if bar_x < 0:
+            return  # Not enough space
+        
+        # Calculate evaluation percentage (0-100, 50 = equal)
+        if self.evaluation_mate is not None:
+            # Mate situation
+            eval_percent = 100 if self.evaluation_mate > 0 else 0
+        else:
+            # Centipawn evaluation
+            # Clamp to +/- 10 pawns (1000 centipawns)
+            clamped_eval = max(-1000, min(1000, self.evaluation_cp))
+            # Convert to 0-100 scale (50 = equal)
+            eval_percent = 50 + (clamped_eval / 1000.0) * 50
+        
+        # Draw background (full bar)
+        painter.fillRect(bar_x, bar_y, self.eval_bar_width, bar_height, QColor("#1e1e1e"))
+        
+        # Calculate split point
+        white_height = int(bar_height * (1 - eval_percent / 100.0))
+        black_height = bar_height - white_height
+        
+        # Draw black advantage (top)
+        if black_height > 0:
+            painter.fillRect(bar_x, bar_y, self.eval_bar_width, black_height, QColor("#3d3d3d"))
+        
+        # Draw white advantage (bottom)
+        if white_height > 0:
+            painter.fillRect(bar_x, bar_y + black_height, self.eval_bar_width, white_height, QColor("#e8e8e8"))
+        
+        # Draw border
+        painter.setPen(QPen(QColor("#555555"), 1))
+        painter.drawRect(bar_x, bar_y, self.eval_bar_width, bar_height)
+        
+        # Draw evaluation text (small, vertical center)
+        if self.evaluation_mate is not None:
+            eval_text = f"M{abs(self.evaluation_mate)}"
+            text_color = QColor("#ffffff") if self.evaluation_mate > 0 else QColor("#000000")
+        else:
+            eval_value = self.evaluation_cp / 100.0
+            if abs(eval_value) < 0.1:
+                eval_text = "0.0"
+            else:
+                eval_text = f"{eval_value:+.1f}"
+            # Choose text color based on which side is on top at text position
+            text_color = QColor("#000000") if eval_percent > 50 else QColor("#ffffff")
+        
+        font = QFont()
+        font.setPointSize(8)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(text_color)
+        
+        # Draw text at center of bar
+        text_rect = QRect(bar_x, bar_y + bar_height // 2 - 20, self.eval_bar_width, 40)
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, eval_text)
+    
+    def _draw_floating_controls(self, painter: QPainter):
+        """Draw floating control buttons (zoom, pan, flip) - very discreet"""
+        if not self.controls_visible:
+            return
+        
+        # Position: top-right corner of board
+        btn_size = self.control_button_size
+        padding = 5
+        start_x = self.margin + self.board_size - btn_size - padding + self.pan_offset.x()
+        start_y = self.margin + padding + self.pan_offset.y()
+        
+        # Semi-transparent background
+        bg_color = QColor(30, 30, 30, 180)  # Dark with transparency
+        
+        # Draw buttons vertically
+        buttons = [
+            ("🔍+", "Zoom in"),
+            ("🔍-", "Zoom out"),
+            ("⟲", "Flip board"),
+            ("🖐", "Pan mode" if not self.pan_mode else "Play mode")
+        ]
+        
+        for i, (icon, tooltip) in enumerate(buttons):
+            y = start_y + i * (btn_size + padding)
+            
+            # Background
+            painter.fillRect(start_x, y, btn_size, btn_size, bg_color)
+            painter.setPen(QPen(QColor("#4FC3F7"), 1))
+            painter.drawRect(start_x, y, btn_size, btn_size)
+            
+            # Icon text
+            painter.setPen(QColor("#ffffff"))
+            font = QFont()
+            font.setPointSize(10)
+            painter.setFont(font)
+            text_rect = QRect(start_x, y, btn_size, btn_size)
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, icon)
                 move = legal_move
                 break
                 
