@@ -341,8 +341,8 @@ class EngineWorker(QObject):
         if self.winboard_engine and self.protocol == "XBoard":
             print(f"DEBUG: Demande du meilleur coup (WinBoard) avec time_limit={time_limit}")
             
-            # Create a thread-safe queue to receive the move
-            move_queue = asyncio.Queue()
+            # Use a simple container to store the move (thread-safe for single write)
+            move_result = {'move': None, 'received': False}
             
             def on_move_ready(move_str):
                 """Callback when WinBoard engine returns a move"""
@@ -351,34 +351,36 @@ class EngineWorker(QObject):
                     # Convert UCI move string to chess.Move
                     move = chess.Move.from_uci(move_str)
                     print(f"DEBUG: Converted to chess.Move: {move}")
-                    # Put in queue (thread-safe)
-                    asyncio.run_coroutine_threadsafe(
-                        move_queue.put(move),
-                        self.loop
-                    )
+                    move_result['move'] = move
+                    move_result['received'] = True
                 except Exception as e:
                     print(f"DEBUG: Error parsing WinBoard move '{move_str}': {e}")
-                    asyncio.run_coroutine_threadsafe(
-                        move_queue.put(None),
-                        self.loop
-                    )
+                    move_result['move'] = None
+                    move_result['received'] = True
             
             # Connect signal
             self.winboard_engine.move_ready.connect(on_move_ready)
             
             try:
                 # Set position and request move
+                print(f"DEBUG: Setting WinBoard position and starting search")
                 self.winboard_engine.set_position(board)
                 self.winboard_engine.go(time_limit)
                 
-                # Wait for move with timeout
-                move = await asyncio.wait_for(move_queue.get(), timeout=time_limit + 10.0)
+                # Wait for move with polling (simpler than async queue)
+                start_time = asyncio.get_event_loop().time()
+                timeout = time_limit + 10.0
+                
+                while not move_result['received']:
+                    await asyncio.sleep(0.1)  # Check every 100ms
+                    if asyncio.get_event_loop().time() - start_time > timeout:
+                        print(f"DEBUG: Timeout waiting for WinBoard move ({timeout}s)")
+                        return None
+                
+                move = move_result['move']
                 print(f"DEBUG: Meilleur coup reçu (WinBoard): {move}")
                 return move
                 
-            except asyncio.TimeoutError:
-                print("DEBUG: Timeout waiting for WinBoard move")
-                return None
             except Exception as e:
                 print(f"DEBUG: Error in WinBoard get_best_move: {e}")
                 import traceback
@@ -602,7 +604,8 @@ class EngineManager(QObject):
             print("DEBUG: Pas de worker ou pas d'event loop")
             return
         
-        if not self.worker.engine:
+        # Check if either UCI or WinBoard engine is running
+        if not self.worker.engine and not self.worker.winboard_engine:
             print("DEBUG: Pas de moteur démarré dans le worker")
             return
         
