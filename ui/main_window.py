@@ -1740,7 +1740,6 @@ class MainWindow(QMainWindow):
                         f"Note: L'extraction des textures depuis les fichiers .dat\n"
                         f"sera implémentée dans la prochaine version."
                     )
-        dialog.theme_changed.connect(self.on_theme_changed)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
             theme = dialog.get_selected_theme()
