@@ -27,6 +27,7 @@ from ui.layout_presets import LayoutPresets  # NEW: Layout presets
 from ui.game_report_dialog import GameReportDialog  # NEW: Game report
 from ui.about_dialog import AboutDialog  # NEW: About dialog
 from ui.board_control_widget import BoardControlWidget  # NEW: Board controls
+from ui.chessmaster_theme_dialog import ChessmasterThemeDialog  # NEW: Chessmaster themes
 from core.game import ChessGame
 from core.engine_manager import EngineManager
 from core.avatar_manager import AvatarManager
@@ -323,6 +324,12 @@ class MainWindow(QMainWindow):
         theme_config_action.setShortcut("Ctrl+T")
         theme_config_action.triggered.connect(self.open_theme_config)
         appearance_menu.addAction(theme_config_action)
+        
+        # NEW: Chessmaster themes
+        chessmaster_themes_action = QAction("🎨 Thèmes Chessmaster...", self)
+        chessmaster_themes_action.setShortcut("Ctrl+Shift+T")
+        chessmaster_themes_action.triggered.connect(self.open_chessmaster_themes)
+        appearance_menu.addAction(chessmaster_themes_action)
         
         appearance_menu.addSeparator()
         
@@ -1706,6 +1713,33 @@ class MainWindow(QMainWindow):
         current_piece_set = self.chessboard.piece_set
         
         dialog = ThemeConfigDialog(self, current_theme, current_piece_set)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            theme, piece_set = dialog.get_config()
+            self.chessboard.set_theme(theme)
+            self.chessboard.set_piece_set(piece_set)
+            self.statusBar().showMessage(f"Thème: {theme}, Pièces: {piece_set}", 3000)
+    
+    def open_chessmaster_themes(self):
+        """Open Chessmaster themes selector"""
+        dialog = ChessmasterThemeDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            theme_id = dialog.get_selected_theme()
+            if theme_id:
+                from core.chessmaster_themes import get_chessmaster_theme_manager
+                manager = get_chessmaster_theme_manager()
+                theme = manager.get_theme(theme_id)
+                if theme:
+                    self.statusBar().showMessage(f"Thème Chessmaster sélectionné: {theme.name}", 3000)
+                    # TODO: Apply theme to board (extract textures from .dat)
+                    QMessageBox.information(
+                        self,
+                        "Thème sélectionné",
+                        f"Thème: {theme.name}\n"
+                        f"Catégorie: {theme.category}\n"
+                        f"Description: {theme.description}\n\n"
+                        f"Note: L'extraction des textures depuis les fichiers .dat\n"
+                        f"sera implémentée dans la prochaine version."
+                    )
         dialog.theme_changed.connect(self.on_theme_changed)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
