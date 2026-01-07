@@ -2,8 +2,8 @@
 2D Chess board widget with drag and drop functionality
 """
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import Qt, QPoint, QRect, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QPixmap, QPen, QBrush, QMouseEvent, QFont
+from PyQt6.QtCore import Qt, QPoint, QRect, pyqtSignal, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import QPainter, QColor, QPixmap, QPen, QBrush, QMouseEvent, QFont, QWheelEvent
 import chess
 from typing import Optional, List
 from ui.resolution_manager import get_resolution_manager
@@ -13,10 +13,12 @@ from ui.promotion_dialog import PromotionDialog
 
 
 class ChessBoardWidget(QWidget):
-    """Interactive 2D chess board widget"""
+    """Interactive 2D chess board widget with zoom and pan support"""
     
     # Signal emitted when a move is made (from_square, to_square)
     move_made = pyqtSignal(int, int)
+    # Signal emitted when zoom level changes
+    zoom_changed = pyqtSignal(float)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -54,6 +56,16 @@ class ChessBoardWidget(QWidget):
         
         # Flip board (False = white at bottom)
         self.flipped = False
+        
+        # Zoom and pan support
+        self.zoom_factor = 1.0  # 1.0 = 100%
+        self.min_zoom = 0.5     # 50% minimum
+        self.max_zoom = 2.0     # 200% maximum
+        self.pan_offset = QPoint(0, 0)
+        self.pan_mode = False  # Toggle for pan mode
+        self.pan_dragging = False
+        self.pan_start_pos = QPoint()
+        self.pan_start_offset = QPoint()
         
         # Calculate margins based on resolution
         self.margin = self.res_mgr.get_margin(30)
@@ -115,8 +127,54 @@ class ChessBoardWidget(QWidget):
         self.piece_set = piece_set
         self.update()
         
+    def set_pan_mode(self, enabled: bool):
+        """Enable or disable pan mode"""
+        self.pan_mode = enabled
+        if enabled:
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        else:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+    
+    def set_zoom(self, zoom: float):
+        """Set zoom level (0.5 to 2.0)"""
+        old_zoom = self.zoom_factor
+        self.zoom_factor = max(self.min_zoom, min(self.max_zoom, zoom))
+        
+        # Update square size based on zoom
+        base_square_size = self.res_mgr.get_square_size()
+        self.square_size = int(base_square_size * self.zoom_factor)
+        self.board_size = self.square_size * 8
+        
+        # Update SVG pieces size
+        if self.piece_set == "svg":
+            self.svg_pieces = SVGPieces("chessavatar", self.square_size)
+        
+        # Adjust piece font size for unicode pieces
+        self.piece_font_size = int(self.res_mgr.get_piece_font_size() * self.zoom_factor)
+        
+        # Emit signal
+        self.zoom_changed.emit(self.zoom_factor)
+        self.update()
+    
+    def zoom_in(self):
+        """Zoom in by 10%"""
+        self.set_zoom(self.zoom_factor + 0.1)
+    
+    def zoom_out(self):
+        """Zoom out by 10%"""
+        self.set_zoom(self.zoom_factor - 0.1)
+    
+    def reset_zoom(self):
+        """Reset zoom to 100%"""
+        self.set_zoom(1.0)
+    
+    def reset_pan(self):
+        """Reset pan offset to center"""
+        self.pan_offset = QPoint(0, 0)
+        self.update()
+    
     def square_to_coords(self, square: int) -> tuple:
-        """Convert chess square to pixel coordinates"""
+        """Convert chess square to pixel coordinates (with zoom and pan)"""
         if self.flipped:
             file = 7 - chess.square_file(square)
             rank = chess.square_rank(square)
@@ -124,14 +182,14 @@ class ChessBoardWidget(QWidget):
             file = chess.square_file(square)
             rank = 7 - chess.square_rank(square)
         
-        x = self.margin + file * self.square_size
-        y = self.margin + rank * self.square_size
+        x = self.margin + file * self.square_size + self.pan_offset.x()
+        y = self.margin + rank * self.square_size + self.pan_offset.y()
         return (x, y)
         
     def coords_to_square(self, x: int, y: int) -> Optional[int]:
-        """Convert pixel coordinates to chess square"""
-        x -= self.margin
-        y -= self.margin
+        """Convert pixel coordinates to chess square (with zoom and pan)"""
+        x -= self.margin + self.pan_offset.x()
+        y -= self.margin + self.pan_offset.y()
         
         if x < 0 or y < 0 or x >= self.board_size or y >= self.board_size:
             return None
@@ -260,9 +318,25 @@ class ChessBoardWidget(QWidget):
                     symbol
                 )
             
+    def wheelEvent(self, event: QWheelEvent):
+        """Handle mouse wheel for zoom"""
+        if event.angleDelta().y() > 0:
+            self.zoom_in()
+        else:
+            self.zoom_out()
+    
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press"""
         if event.button() == Qt.MouseButton.LeftButton:
+            # Pan mode - drag to move board
+            if self.pan_mode:
+                self.pan_dragging = True
+                self.pan_start_pos = event.pos()
+                self.pan_start_offset = QPoint(self.pan_offset)
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                return
+            
+            # Normal chess piece interaction
             square = self.coords_to_square(event.pos().x(), event.pos().y())
             
             if square is not None:
@@ -285,25 +359,38 @@ class ChessBoardWidget(QWidget):
                     self.try_move(self.selected_square, square)
                     
     def mouseMoveEvent(self, event: QMouseEvent):
-        """Handle mouse move (dragging)"""
-        if self.dragging:
+        """Handle mouse move (dragging or panning)"""
+        if self.pan_dragging:
+            # Update pan offset
+            delta = event.pos() - self.pan_start_pos
+            self.pan_offset = self.pan_start_offset + delta
+            self.update()
+        elif self.dragging:
             self.drag_pos = event.pos()
             self.update()
             
     def mouseReleaseEvent(self, event: QMouseEvent):
         """Handle mouse release"""
-        if event.button() == Qt.MouseButton.LeftButton and self.dragging:
-            self.dragging = False
-            to_square = self.coords_to_square(event.pos().x(), event.pos().y())
+        if event.button() == Qt.MouseButton.LeftButton:
+            # End panning
+            if self.pan_dragging:
+                self.pan_dragging = False
+                self.setCursor(Qt.CursorShape.OpenHandCursor)
+                return
             
-            if to_square is not None and self.from_square is not None:
-                self.try_move(self.from_square, to_square)
-            
-            self.selected_square = None
-            self.legal_moves = []
-            self.from_square = None
-            self.drag_piece = None
-            self.update()
+            # End piece dragging
+            if self.dragging:
+                self.dragging = False
+                to_square = self.coords_to_square(event.pos().x(), event.pos().y())
+                
+                if to_square is not None and self.from_square is not None:
+                    self.try_move(self.from_square, to_square)
+                
+                self.selected_square = None
+                self.legal_moves = []
+                self.from_square = None
+                self.drag_piece = None
+                self.update()
             
     def try_move(self, from_square: int, to_square: int):
         """Try to make a move"""

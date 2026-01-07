@@ -26,6 +26,7 @@ from ui.resolution_manager import get_resolution_manager
 from ui.layout_presets import LayoutPresets  # NEW: Layout presets
 from ui.game_report_dialog import GameReportDialog  # NEW: Game report
 from ui.about_dialog import AboutDialog  # NEW: About dialog
+from ui.board_control_widget import BoardControlWidget  # NEW: Board controls
 from core.game import ChessGame
 from core.engine_manager import EngineManager
 from core.avatar_manager import AvatarManager
@@ -120,6 +121,18 @@ class MainWindow(QMainWindow):
             QSizePolicy.Policy.Expanding
         )
         left_layout.addWidget(self.chessboard, stretch=10)
+        
+        # Board control widget
+        self.board_control = BoardControlWidget()
+        self.board_control.zoom_in_clicked.connect(self.chessboard.zoom_in)
+        self.board_control.zoom_out_clicked.connect(self.chessboard.zoom_out)
+        self.board_control.zoom_reset_clicked.connect(self.chessboard.reset_zoom)
+        self.board_control.zoom_changed.connect(self.chessboard.set_zoom)
+        self.board_control.pan_mode_toggled.connect(self.chessboard.set_pan_mode)
+        self.board_control.pan_reset_clicked.connect(self.chessboard.reset_pan)
+        self.chessboard.zoom_changed.connect(self.board_control.update_zoom_display)
+        self.board_control.setMaximumHeight(self.res_mgr.get_engine_panel_height())
+        left_layout.addWidget(self.board_control)
         
         # Create a horizontal splitter for panels below the board
         self.bottom_splitter = QSplitter(Qt.Orientation.Horizontal)
