@@ -11,6 +11,18 @@
         "Ponder": false,
         "Skill Level": 1
       }
+    },
+    {
+      "name": "TheKing350_64",
+      "path": "C:/Program Files (x86)/Ubisoft/Chessmaster Grandmaster Edition/TheKing350_64.exe",
+      "protocol": "WinBoard",
+      "options": {}
+    },
+    {
+      "name": "TheKing350",
+      "path": "C:/Program Files (x86)/Ubisoft/Chessmaster Grandmaster Edition/TheKing350.exe",
+      "protocol": "WinBoard",
+      "options": {}
     }
   ]
 }

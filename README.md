@@ -30,6 +30,18 @@ A modern chess application inspired by Fritz 20, built with Python and PyQt6.
 - ✅ **Board customization** (colors, piece styles, themes)
 - ✅ **Configuration persistence** with 3 preset themes
 
+### Phase 5: UX & Navigation ✅ **[NEW!]**
+- ✅ **16 Board Themes** 🎨 (Classic, Wood, Ocean, Neon, Marble, etc.)
+- ✅ **SVG Pieces** ♟️ (High-quality vector rendering)
+- ✅ **Opening Book** 📖 (80+ openings recognized with ECO codes)
+- ✅ **Move Navigation** 🎮 (Browse game history with arrows/clicks)
+- ✅ **Click-Click Mode** 🖱️ (Alternative to drag-and-drop)
+
+### Phase 6: AI vs AI Modes ✅ **[NEW!]**
+- ✅ **Engine vs Engine** ⚙️ (Watch engines battle)
+- ✅ **Avatar vs Avatar** 🤖 (AI players compete)
+- ✅ **Avatar vs Engine** 🆚 (Hybrid matches)
+
 ## Requirements
 
 - Python 3.8 or higher

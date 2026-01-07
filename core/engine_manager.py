@@ -1,5 +1,5 @@
 """
-Engine Manager for UCI chess engines
+Engine Manager for UCI and WinBoard chess engines
 Handles asynchronous communication with chess engines
 """
 import asyncio
@@ -9,6 +9,7 @@ import os
 from typing import Optional, Dict, List, Callable
 from pathlib import Path
 from PyQt6.QtCore import QObject, pyqtSignal, QThread
+from core.winboard_engine import WinboardEngine
 
 
 class EngineInfo:
@@ -44,11 +45,12 @@ class EngineWorker(QObject):
     analysis_update = pyqtSignal(dict)  # Emits analysis info
     engine_ready = pyqtSignal(str)  # Engine name when ready
     engine_error = pyqtSignal(str)  # Error message
-    start_requested = pyqtSignal(str, dict)  # Engine path and options to start
+    start_requested = pyqtSignal(str, dict)  # Engine path and options (includes protocol) to start
     
     def __init__(self):
         super().__init__()
         self.engine: Optional[chess.engine.SimpleEngine] = None
+        self.winboard_engine: Optional[WinboardEngine] = None  # For WinBoard engines
         self.transport = None
         self.protocol = None
         self.is_analyzing = False
@@ -71,90 +73,117 @@ class EngineWorker(QObject):
         
     def _start_engine_slot(self, engine_path: str, options: dict):
         """Slot to start engine (called via signal from main thread)"""
-        print(f"DEBUG: _start_engine_slot appelé avec {engine_path}")
-        print(f"DEBUG: Options UCI: {options}")
-        self.uci_options = options
+        # Extract protocol from options (default to UCI if not present)
+        protocol = options.get("__protocol__", "UCI")
+        print(f"DEBUG: _start_engine_slot appelé avec {engine_path}, protocol={protocol}")
+        # Remove protocol from options before storing
+        self.uci_options = {k: v for k, v in options.items() if k != "__protocol__"}
+        print(f"DEBUG: Options UCI: {self.uci_options}")
         self.engine_path_to_start = engine_path
+        self.protocol = protocol
         
         # Schedule engine start in the event loop
         if self.loop and self.loop.is_running():
             print("DEBUG: Planification du démarrage du moteur dans l'event loop")
-            asyncio.run_coroutine_threadsafe(self.start_engine(engine_path), self.loop)
+            asyncio.run_coroutine_threadsafe(self.start_engine(engine_path, protocol), self.loop)
         else:
             print("DEBUG: ERREUR - Event loop n'est pas en cours d'exécution")
             self.engine_error.emit("Event loop not running")
     
-    async def start_engine(self, engine_path: str):
+    async def start_engine(self, engine_path: str, protocol: str = "UCI"):
         """Start the chess engine"""
-        print(f"DEBUG: EngineWorker.start_engine appelé avec {engine_path}")
+        print(f"DEBUG: EngineWorker.start_engine appelé avec {engine_path}, protocol={protocol}")
         try:
-            print("DEBUG: Appel de chess.engine.popen_uci")
-            self.transport, self.engine = await chess.engine.popen_uci(engine_path)
-            print("DEBUG: Moteur UCI démarré avec succès")
-            
-            # Options automatically managed by the engine during analysis
-            AUTO_MANAGED_OPTIONS = {"MultiPV", "Ponder"}
-            
-            # Get engine info
-            engine_name = self.engine.id.get("name", "Unknown Engine")
-            print(f"DEBUG: Nom du moteur: {engine_name}")
-            
-            # Configure UCI options with auto-detection if not specified
-            cpu_count = os.cpu_count() or 1
-            
-            # Apply default options if not provided
-            config_options = {}
-            
-            # Threads: use all CPU cores if not specified
-            if "Threads" not in self.uci_options:
-                config_options["Threads"] = cpu_count
-                print(f"DEBUG: Configuration automatique - Threads: {cpu_count}")
-            else:
-                config_options["Threads"] = self.uci_options["Threads"]
-                print(f"DEBUG: Configuration utilisateur - Threads: {self.uci_options['Threads']}")
-            
-            # Hash: 256 MB default if not specified
-            if "Hash" not in self.uci_options:
-                config_options["Hash"] = 256
-                print(f"DEBUG: Configuration automatique - Hash: 256 MB")
-            else:
-                config_options["Hash"] = self.uci_options["Hash"]
-                print(f"DEBUG: Configuration utilisateur - Hash: {self.uci_options['Hash']} MB")
-            
-            # Skill Level: apply only if >= 0 (-1 means disabled/max strength)
-            if "Skill Level" in self.uci_options:
-                skill_level = self.uci_options["Skill Level"]
-                if skill_level >= 0:
-                    config_options["Skill Level"] = skill_level
-                    print(f"DEBUG: Configuration utilisateur - Skill Level: {skill_level}")
+            # Start engine with the appropriate protocol
+            if protocol == "WinBoard" or protocol == "XBoard":
+                print("DEBUG: Démarrage moteur WinBoard avec subprocess")
+                # Use our custom WinBoard implementation
+                self.winboard_engine = WinboardEngine(engine_path, self.uci_options)
+                
+                # Connect signals
+                self.winboard_engine.engine_ready.connect(
+                    lambda name: self.engine_ready.emit(f"{name} (WinBoard)")
+                )
+                self.winboard_engine.error_occurred.connect(
+                    lambda msg: self.engine_error.emit(msg)
+                )
+                
+                # Start engine
+                if self.winboard_engine.start():
+                    print("DEBUG: Moteur WinBoard démarré avec succès")
+                    self.protocol = "XBoard"
+                    # Note: engine_ready signal will be emitted by WinboardEngine
                 else:
-                    print(f"DEBUG: Skill Level désactivé (force maximale)")
+                    raise Exception("Failed to start WinBoard engine")
+                    
+            else:
+                print("DEBUG: Appel de chess.engine.popen_uci")
+                self.transport, self.engine = await chess.engine.popen_uci(engine_path)
+                print("DEBUG: Moteur UCI démarré avec succès")
+                self.protocol = "UCI"
             
-            # Apply any other user-specified options (except auto-managed ones)
-            for key, value in self.uci_options.items():
-                if key not in config_options and key not in AUTO_MANAGED_OPTIONS:
-                    config_options[key] = value
-            
-            # Configure the engine (filter out automatically managed options)
-            print(f"DEBUG: Application de la configuration UCI: {config_options}")
-            config_options_filtered = {
-                k: v for k, v in config_options.items() 
-                if k not in AUTO_MANAGED_OPTIONS
-            }
-            if len(config_options_filtered) < len(config_options):
-                filtered_out = [k for k in config_options if k in AUTO_MANAGED_OPTIONS]
-                print(f"DEBUG: Options auto-gérées filtrées: {', '.join(filtered_out)}")
-            print(f"DEBUG: Configuration finale: {config_options_filtered}")
-            
-            await self.engine.configure(config_options_filtered)
-            print("DEBUG: Configuration UCI appliquée avec succès")
-            
-            # Store the applied options (auto-managed options are kept in uci_options but not applied)
-            self.uci_options = config_options_filtered.copy()
-            # Note: MultiPV and Ponder are managed automatically during analysis/play
-            
-            print("DEBUG: Émission du signal engine_ready")
-            self.engine_ready.emit(engine_name)
+                # Options automatically managed by the engine during analysis
+                AUTO_MANAGED_OPTIONS = {"MultiPV", "Ponder"}
+                
+                # Get engine info
+                engine_name = self.engine.id.get("name", "Unknown Engine")
+                print(f"DEBUG: Nom du moteur: {engine_name}")
+                
+                # Configure UCI engine options
+                # Apply default options if not provided
+                config_options = {}
+                cpu_count = os.cpu_count() or 1
+                
+                # Threads: use all CPU cores if not specified
+                if "Threads" not in self.uci_options:
+                    config_options["Threads"] = cpu_count
+                    print(f"DEBUG: Configuration automatique - Threads: {cpu_count}")
+                else:
+                    config_options["Threads"] = self.uci_options["Threads"]
+                    print(f"DEBUG: Configuration utilisateur - Threads: {self.uci_options['Threads']}")
+                
+                # Hash: 256 MB default if not specified
+                if "Hash" not in self.uci_options:
+                    config_options["Hash"] = 256
+                    print(f"DEBUG: Configuration automatique - Hash: 256 MB")
+                else:
+                    config_options["Hash"] = self.uci_options["Hash"]
+                    print(f"DEBUG: Configuration utilisateur - Hash: {self.uci_options['Hash']} MB")
+                
+                # Skill Level: apply only if >= 0 (-1 means disabled/max strength)
+                if "Skill Level" in self.uci_options:
+                    skill_level = self.uci_options["Skill Level"]
+                    if skill_level >= 0:
+                        config_options["Skill Level"] = skill_level
+                        print(f"DEBUG: Configuration utilisateur - Skill Level: {skill_level}")
+                    else:
+                        print(f"DEBUG: Skill Level désactivé (force maximale)")
+                
+                # Apply any other user-specified options (except auto-managed ones)
+                for key, value in self.uci_options.items():
+                    if key not in config_options and key not in AUTO_MANAGED_OPTIONS:
+                        config_options[key] = value
+                
+                # Configure the engine (filter out automatically managed options)
+                print(f"DEBUG: Application de la configuration UCI: {config_options}")
+                config_options_filtered = {
+                    k: v for k, v in config_options.items() 
+                    if k not in AUTO_MANAGED_OPTIONS
+                }
+                if len(config_options_filtered) < len(config_options):
+                    filtered_out = [k for k in config_options if k in AUTO_MANAGED_OPTIONS]
+                    print(f"DEBUG: Options auto-gérées filtrées: {', '.join(filtered_out)}")
+                print(f"DEBUG: Configuration finale: {config_options_filtered}")
+                
+                await self.engine.configure(config_options_filtered)
+                print("DEBUG: Configuration UCI appliquée avec succès")
+                
+                # Store the applied options (auto-managed options are kept in uci_options but not applied)
+                self.uci_options = config_options_filtered.copy()
+                # Note: MultiPV and Ponder are managed automatically during analysis/play
+                
+                print("DEBUG: Émission du signal engine_ready")
+                self.engine_ready.emit(engine_name)
             
         except Exception as e:
             print(f"DEBUG: Exception dans start_engine: {e}")
@@ -165,12 +194,32 @@ class EngineWorker(QObject):
     async def stop_engine(self):
         """Stop the chess engine"""
         self._stop_flag = True
+        
+        # Stop WinBoard engine
+        if self.winboard_engine:
+            try:
+                self.winboard_engine.quit()
+            except:
+                pass
+            self.winboard_engine = None
+        
+        # Stop UCI engine
         if self.engine:
             try:
                 await self.engine.quit()
             except:
                 pass
             self.engine = None
+            
+    async def update_option(self, name: str, value: any):
+        """Update a UCI option on the fly"""
+        if self.engine:
+            try:
+                print(f"DEBUG: Mise à jour de l'option {name} -> {value}")
+                self.uci_options[name] = value
+                await self.engine.configure({name: value})
+            except Exception as e:
+                print(f"DEBUG: Error updating option {name}: {e}")
             
     async def analyze_position(self, board: chess.Board, multipv: int = 3, time_limit: float = 1.0):
         """
@@ -182,9 +231,10 @@ class EngineWorker(QObject):
             time_limit: Time limit for analysis in seconds
         """
         print(f"DEBUG: EngineWorker.analyze_position appelé")
+        self._stop_flag = False  # Reset stop flag for new analysis
         
-        if not self.engine or self._stop_flag:
-            print(f"DEBUG: Engine={self.engine}, stop_flag={self._stop_flag}")
+        if not self.engine:
+            print(f"DEBUG: Engine={self.engine}")
             return
         
         print(f"DEBUG: Configuration de l'analyse")
@@ -259,15 +309,51 @@ class EngineWorker(QObject):
             Best move or None if error
         """
         print(f"DEBUG: EngineWorker.get_best_move appelé")
+        self._stop_flag = False  # Reset stop flag for new move calculation
         
-        if not self.engine or self._stop_flag:
-            print(f"DEBUG: Engine={self.engine}, stop_flag={self._stop_flag}")
+        # Handle WinBoard engine
+        if self.winboard_engine and self.protocol == "XBoard":
+            print(f"DEBUG: Demande du meilleur coup (WinBoard) avec time_limit={time_limit}")
+            
+            # Set up one-time signal handler
+            move_received = asyncio.Future()
+            
+            def on_move_ready(move_str):
+                if not move_received.done():
+                    try:
+                        # Convert UCI move string to chess.Move
+                        move = chess.Move.from_uci(move_str)
+                        move_received.set_result(move)
+                    except Exception as e:
+                        print(f"DEBUG: Error parsing WinBoard move '{move_str}': {e}")
+                        move_received.set_result(None)
+            
+            self.winboard_engine.move_ready.connect(on_move_ready)
+            
+            # Set position and request move
+            self.winboard_engine.set_position(board)
+            self.winboard_engine.go(time_limit)
+            
+            # Wait for move with timeout
+            try:
+                move = await asyncio.wait_for(move_received, timeout=time_limit + 5.0)
+                self.winboard_engine.move_ready.disconnect(on_move_ready)
+                print(f"DEBUG: Meilleur coup reçu (WinBoard): {move}")
+                return move
+            except asyncio.TimeoutError:
+                self.winboard_engine.move_ready.disconnect(on_move_ready)
+                print("DEBUG: Timeout waiting for WinBoard move")
+                return None
+        
+        # Handle UCI engine
+        if not self.engine:
+            print(f"DEBUG: Engine={self.engine}")
             return None
         
         try:
-            print(f"DEBUG: Demande du meilleur coup avec time_limit={time_limit}")
+            print(f"DEBUG: Demande du meilleur coup (UCI) avec time_limit={time_limit}")
             result = await self.engine.play(board, chess.engine.Limit(time=time_limit))
-            print(f"DEBUG: Meilleur coup reçu: {result.move}")
+            print(f"DEBUG: Meilleur coup reçu (UCI): {result.move}")
             return result.move
         except Exception as e:
             print(f"ERROR: get_best_move failed: {e}")
@@ -393,7 +479,10 @@ class EngineManager(QObject):
         time.sleep(0.2)  # 200ms delay
         
         print("DEBUG: Émission du signal start_requested")
-        self.worker.start_requested.emit(engine.path, engine.options)
+        # Pass protocol in options dict with special key
+        options_with_protocol = engine.options.copy()
+        options_with_protocol["__protocol__"] = engine.protocol
+        self.worker.start_requested.emit(engine.path, options_with_protocol)
         
     def _start_engine_async(self, engine_path: str):
         """Start engine asynchronously"""
@@ -492,6 +581,19 @@ class EngineManager(QObject):
             self.worker._stop_flag = True
         self.is_analyzing = False
     
+    def update_option(self, name: str, value: any):
+        """Update a UCI option on the fly"""
+        if self.worker and self.worker.loop:
+            print(f"DEBUG: EngineManager.update_option {name}={value}")
+            asyncio.run_coroutine_threadsafe(
+                self.worker.update_option(name, value),
+                self.worker.loop
+            )
+            
+            # Also update the active engine's options so they persist if saved
+            if self.active_engine:
+                self.active_engine.options[name] = value
+    
     def get_best_move(self, board: chess.Board, time_limit: float = 2.0):
         """
         Get best move from engine
@@ -509,7 +611,8 @@ class EngineManager(QObject):
             print("DEBUG: Pas de worker ou pas d'event loop")
             return None
         
-        if not self.worker.engine:
+        # Check if either UCI or WinBoard engine is running
+        if not self.worker.engine and not self.worker.winboard_engine:
             print("DEBUG: Pas de moteur démarré dans le worker")
             return None
         
@@ -561,7 +664,10 @@ class EngineManager(QObject):
         
     def is_engine_running(self) -> bool:
         """Check if an engine is currently running"""
-        return self.worker is not None and self.worker_thread is not None and self.worker_thread.isRunning()
+        return (self.worker is not None and 
+                self.worker_thread is not None and 
+                self.worker_thread.isRunning() and
+                (self.worker.engine is not None or self.worker.winboard_engine is not None))
         
     def get_active_engine_name(self) -> Optional[str]:
         """Get the name of the active engine"""

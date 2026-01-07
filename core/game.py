@@ -87,8 +87,10 @@ class ChessGame:
         pgn_text = ""
         for i, move in enumerate(self.move_history):
             if i % 2 == 0:
+                # White move
                 pgn_text += f"{i//2 + 1}. {move} "
             else:
+                # Black move
                 pgn_text += f"{move} "
         return pgn_text.strip()
         

@@ -76,6 +76,77 @@
           "depth": 2
         }
       }
+    },
+    {
+      "id": "chesscom_blitz-move",
+      "username": "Blitz-Move",
+      "platform": "chesscom",
+      "display_name": "Blitz-Move",
+      "photo_path": null,
+      "created_date": "2026-01-06T17:10:35.889772",
+      "last_played": null,
+      "games_played": 0,
+      "style_data": {
+        "username": "Blitz-Move",
+        "platform": "Chess.com",
+        "total_games": 100,
+        "win_rate": 49.0,
+        "draw_rate": 9.0,
+        "loss_rate": 42.0,
+        "average_elo": 1477,
+        "top_openings_white": [
+          [
+            "Kings-Gambit-2...d6",
+            2
+          ],
+          [
+            "Caro-Kann-Defense-Exchange-Variation-3...cxd5-4.Nf3-Nc6",
+            2
+          ],
+          [
+            "Vienna-Game-Falkbeer-Stanley-Variation",
+            1
+          ],
+          [
+            "Bishops-Opening-2...Nc6",
+            1
+          ],
+          [
+            "Pirc-Defense-Classical-Variation-4...Bg7-5.Bc4-O-O",
+            1
+          ]
+        ],
+        "top_openings_black": [
+          [
+            "Modern-Defense-with-1-e4-2.d4-Bg7-3.Nf3",
+            6
+          ],
+          [
+            "Modern-Defense-with-1-d4",
+            4
+          ],
+          [
+            "Modern-Defense-Three-Pawns-Attack",
+            3
+          ],
+          [
+            "Reti-Opening-Kingside-Fianchetto-Variation-2.e4-Bg7",
+            2
+          ],
+          [
+            "Modern-Defense-with-1-e4-2.d4-Bg7",
+            2
+          ]
+        ],
+        "average_game_length": 76.7,
+        "aggressive_score": 14.7,
+        "tactical_score": 52.8,
+        "positional_score": 85.3,
+        "white_win_rate": 43.8,
+        "black_win_rate": 53.8,
+        "preferred_time_control": "blitz",
+        "estimated_skill_level": 9
+      }
     }
   ]
 }

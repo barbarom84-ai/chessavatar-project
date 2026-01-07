@@ -167,12 +167,14 @@ class EnginePanel(QWidget):
     # Signals
     start_analysis = pyqtSignal()
     stop_analysis = pyqtSignal()
+    option_changed = pyqtSignal(str, object)
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.is_analyzing = False
         self.current_depth = 0
         self.current_nodes = 0
+        self.current_threads = 1
         self.variations_data: Dict[int, Dict] = {}  # multipv -> data
         self.init_ui()
         
@@ -196,9 +198,58 @@ class EnginePanel(QWidget):
         
         # UCI Configuration display
         uci_layout = QHBoxLayout()
+        
+        # Threads group
+        threads_layout = QHBoxLayout()
+        threads_layout.setSpacing(5)
+        
         self.threads_label = QLabel("Threads: --")
         self.threads_label.setStyleSheet("font-size: 8pt; color: #888888;")
-        uci_layout.addWidget(self.threads_label)
+        threads_layout.addWidget(self.threads_label)
+        
+        btn_style = """
+            QPushButton {
+                background-color: #3e3e3e;
+                color: #d4d4d4;
+                border: 1px solid #555555;
+                border-radius: 2px;
+                min-width: 18px;
+                min-height: 18px;
+                max-width: 18px;
+                max-height: 18px;
+                font-size: 10pt;
+                font-weight: bold;
+                padding: 0px;
+                margin: 0px;
+            }
+            QPushButton:hover {
+                background-color: #4e4e4e;
+            }
+            QPushButton:pressed {
+                background-color: #2e2e2e;
+            }
+            QPushButton:disabled {
+                color: #555555;
+                background-color: #2a2a2a;
+            }
+        """
+        
+        self.minus_thread_btn = QPushButton("-")
+        self.minus_thread_btn.setStyleSheet(btn_style)
+        self.minus_thread_btn.setToolTip("Diminuer le nombre de threads")
+        self.minus_thread_btn.clicked.connect(self._on_decrease_threads)
+        self.minus_thread_btn.setEnabled(False)
+        threads_layout.addWidget(self.minus_thread_btn)
+        
+        self.plus_thread_btn = QPushButton("+")
+        self.plus_thread_btn.setStyleSheet(btn_style)
+        self.plus_thread_btn.setToolTip("Augmenter le nombre de threads")
+        self.plus_thread_btn.clicked.connect(self._on_increase_threads)
+        self.plus_thread_btn.setEnabled(False)
+        threads_layout.addWidget(self.plus_thread_btn)
+        
+        uci_layout.addLayout(threads_layout)
+        uci_layout.addSpacing(15)
         
         self.hash_label = QLabel("Hash: --")
         self.hash_label.setStyleSheet("font-size: 8pt; color: #888888;")
@@ -278,13 +329,25 @@ class EnginePanel(QWidget):
         
         # Display UCI parameters
         if uci_options:
-            threads = uci_options.get("Threads", "--")
+            threads = uci_options.get("Threads", 1)
             hash_mb = uci_options.get("Hash", "--")
-            self.threads_label.setText(f"Threads: {threads}")
+            
+            # Handle the case where threads might be a string or None
+            try:
+                self.current_threads = int(threads)
+            except (ValueError, TypeError):
+                self.current_threads = 1
+                
+            self.threads_label.setText(f"Threads: {self.current_threads}")
             self.hash_label.setText(f"Hash: {hash_mb} MB")
+            
+            self.minus_thread_btn.setEnabled(True)
+            self.plus_thread_btn.setEnabled(True)
         else:
             self.threads_label.setText("Threads: --")
             self.hash_label.setText("Hash: --")
+            self.minus_thread_btn.setEnabled(False)
+            self.plus_thread_btn.setEnabled(False)
         
     def clear_engine_status(self):
         """Clear engine status"""
@@ -292,7 +355,25 @@ class EnginePanel(QWidget):
         self.engine_status.setStyleSheet("color: #888888; font-size: 9pt;")
         self.analyze_button.setEnabled(False)
         self.stop_button.setEnabled(False)
+        self.minus_thread_btn.setEnabled(False)
+        self.plus_thread_btn.setEnabled(False)
     
+    def _on_increase_threads(self):
+        """Increase thread count"""
+        import os
+        max_threads = os.cpu_count() or 64
+        if self.current_threads < max_threads:
+            self.current_threads += 1
+            self.threads_label.setText(f"Threads: {self.current_threads}")
+            self.option_changed.emit("Threads", self.current_threads)
+            
+    def _on_decrease_threads(self):
+        """Decrease thread count"""
+        if self.current_threads > 1:
+            self.current_threads -= 1
+            self.threads_label.setText(f"Threads: {self.current_threads}")
+            self.option_changed.emit("Threads", self.current_threads)
+            
     def update_analysis(self, data: Dict):
         """
         Update analysis display

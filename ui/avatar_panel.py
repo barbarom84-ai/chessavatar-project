@@ -405,4 +405,10 @@ class AvatarStatusWidget(QWidget):
         self.name_label.setText("Aucun adversaire")
         self.stats_label.setText("Sélectionnez un avatar pour jouer")
         self.style_label.setText("")
+        
+    def setText(self, text: str):
+        """Set simple text display (for special modes like Avatar vs Avatar)"""
+        self.name_label.setText(text)
+        self.stats_label.setText("")
+        self.style_label.setText("")
 

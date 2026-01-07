@@ -3,11 +3,20 @@ python-chess==1.999
 requests==2.31.0
 numpy==1.24.3
 
+# Graphics and visualization
+matplotlib>=3.7.0  # For game analysis graphs
+
 # Recommended for production (HiDPI/4K support)
-# PyQt6-SVG==6.6.0  # SVG rendering for sharp graphics
+PyQt6-SVG==6.6.0  # SVG rendering for sharp graphics
 
 # Build dependencies (optional - only for building executables)
 # pyinstaller>=6.0
 # nuitka>=1.8
 # Pillow>=10.0  # For asset generation
+
+# Development and Testing (install with requirements-test.txt)
+# pytest>=7.4.0
+# pytest-qt>=4.2.0
+# pytest-asyncio>=0.21.0
+# pytest-cov>=4.1.0
 

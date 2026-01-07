@@ -12,17 +12,21 @@ import chess
 class NewGameDialog(QDialog):
     """Dialog for configuring a new game"""
     
-    def __init__(self, engine_available=False, avatar_available=False, avatars=None, parent=None):
+    def __init__(self, engine_available=False, avatar_available=False, avatars=None, engines=None, parent=None):
         super().__init__(parent)
         self.engine_available = engine_available
         self.avatar_available = avatar_available
         self.avatars = avatars or []  # List of Avatar objects
+        self.engines = engines or []  # List of EngineInfo objects
         
         # Default values
         self.mode = "free"
         self.player_color = chess.WHITE
         self.time_control = None
         self.selected_avatar_id = None
+        self.selected_engine_name = None  # Selected engine for vs_engine mode
+        self.selected_white_engine_name = None  # For AI vs AI modes
+        self.selected_black_engine_name = None  # For AI vs AI modes
         
         self.init_ui()
         self.apply_theme()
@@ -76,9 +80,54 @@ class NewGameDialog(QDialog):
         mode_layout.addWidget(self.vs_avatar_radio)
         
         if not self.avatar_available:
-            no_avatar_label = QLabel("   Aucun avatar configure")
+            no_avatar_label = QLabel("   Aucun avatar configuré")
             no_avatar_label.setStyleSheet("color: #888888; font-size: 9pt;")
             mode_layout.addWidget(no_avatar_label)
+        
+        # NEW: Human vs Human mode
+        self.vs_human_radio = QRadioButton("Humain vs Humain (local)")
+        self.vs_human_radio.toggled.connect(self.on_mode_changed)
+        self.mode_group.addButton(self.vs_human_radio, 3)
+        mode_layout.addWidget(self.vs_human_radio)
+        
+        # NEW: AI vs AI modes
+        mode_layout.addWidget(QLabel(""))  # Separator
+        ai_label = QLabel("🤖 Modes IA vs IA (Observer)")
+        ai_label.setStyleSheet("color: #4FC3F7; font-weight: bold; font-size: 10pt; margin-top: 5px;")
+        mode_layout.addWidget(ai_label)
+        
+        self.engine_vs_engine_radio = QRadioButton("⚔️ Moteur vs Moteur")
+        self.engine_vs_engine_radio.setEnabled(self.engine_available)
+        self.engine_vs_engine_radio.toggled.connect(self.on_mode_changed)
+        self.mode_group.addButton(self.engine_vs_engine_radio, 4)
+        mode_layout.addWidget(self.engine_vs_engine_radio)
+        
+        if not self.engine_available:
+            no_engine_ai_label = QLabel("   Aucun moteur configuré")
+            no_engine_ai_label.setStyleSheet("color: #ff6b6b; font-size: 9pt;")
+            mode_layout.addWidget(no_engine_ai_label)
+        
+        self.avatar_vs_avatar_radio = QRadioButton("👥 Avatar vs Avatar")
+        self.avatar_vs_avatar_radio.setEnabled(len(self.avatars) >= 2)
+        self.avatar_vs_avatar_radio.toggled.connect(self.on_mode_changed)
+        self.mode_group.addButton(self.avatar_vs_avatar_radio, 5)
+        mode_layout.addWidget(self.avatar_vs_avatar_radio)
+        
+        if len(self.avatars) < 2:
+            no_2avatars_label = QLabel("   Au moins 2 avatars requis")
+            no_2avatars_label.setStyleSheet("color: #888888; font-size: 9pt;")
+            mode_layout.addWidget(no_2avatars_label)
+        
+        self.avatar_vs_engine_radio = QRadioButton("🤖 Avatar vs Moteur")
+        self.avatar_vs_engine_radio.setEnabled(self.engine_available and self.avatar_available)
+        self.avatar_vs_engine_radio.toggled.connect(self.on_mode_changed)
+        self.mode_group.addButton(self.avatar_vs_engine_radio, 6)
+        mode_layout.addWidget(self.avatar_vs_engine_radio)
+        
+        if not (self.engine_available and self.avatar_available):
+            no_both_label = QLabel("   Moteur ET avatar requis")
+            no_both_label.setStyleSheet("color: #888888; font-size: 9pt;")
+            mode_layout.addWidget(no_both_label)
         
         mode_group.setLayout(mode_layout)
         layout.addWidget(mode_group)
@@ -136,6 +185,68 @@ class NewGameDialog(QDialog):
         self.avatar_group_widget.setVisible(False)  # Hidden by default
         layout.addWidget(self.avatar_group_widget)
         
+        # Engine selection (visible for vs_engine mode)
+        self.engine_group_widget = QGroupBox("Choisir un moteur")
+        engine_layout = QVBoxLayout()
+        
+        self.engine_combo = QComboBox()
+        self.engine_combo.setMinimumHeight(35)
+        if self.engines:
+            for engine in self.engines:
+                protocol = engine.protocol if hasattr(engine, 'protocol') else 'UCI'
+                display_text = f"{engine.name} ({protocol})"
+                self.engine_combo.addItem(display_text, engine.name)
+        else:
+            self.engine_combo.addItem("Aucun moteur disponible", None)
+            self.engine_combo.setEnabled(False)
+        
+        engine_layout.addWidget(self.engine_combo)
+        
+        # Engine info label
+        self.engine_info_label = QLabel("")
+        self.engine_info_label.setStyleSheet("color: #888888; font-size: 9pt; padding: 5px;")
+        engine_layout.addWidget(self.engine_info_label)
+        
+        self.engine_combo.currentIndexChanged.connect(self.on_engine_changed)
+        
+        self.engine_group_widget.setLayout(engine_layout)
+        self.engine_group_widget.setVisible(False)  # Hidden by default
+        layout.addWidget(self.engine_group_widget)
+        
+        # Second avatar selection (for Avatar vs Avatar mode)
+        self.avatar2_group_widget = QGroupBox("Choisir le second avatar")
+        avatar2_layout = QVBoxLayout()
+        
+        self.avatar2_combo = QComboBox()
+        self.avatar2_combo.setMinimumHeight(35)
+        if self.avatars:
+            for avatar in self.avatars:
+                elo = avatar.style_data.get('average_elo', 'N/A')
+                display_text = f"{avatar.display_name} ({elo}) - {avatar.platform.title()}"
+                self.avatar2_combo.addItem(display_text, avatar.id)
+        else:
+            self.avatar2_combo.addItem("Aucun avatar disponible", None)
+            self.avatar2_combo.setEnabled(False)
+        
+        avatar2_layout.addWidget(self.avatar2_combo)
+        
+        # Avatar 2 info label
+        self.avatar2_info_label = QLabel("")
+        self.avatar2_info_label.setStyleSheet("color: #888888; font-size: 9pt; padding: 5px;")
+        self.avatar2_info_label.setWordWrap(True)
+        avatar2_layout.addWidget(self.avatar2_info_label)
+        
+        self.avatar2_combo.currentIndexChanged.connect(self.on_avatar2_changed)
+        
+        self.avatar2_group_widget.setLayout(avatar2_layout)
+        self.avatar2_group_widget.setVisible(False)  # Hidden by default
+        layout.addWidget(self.avatar2_group_widget)
+        
+        # Update avatar2 info if avatars exist
+        if len(self.avatars) >= 2:
+            self.avatar2_combo.setCurrentIndex(1)  # Select second avatar by default
+            self.on_avatar2_changed(1)
+        
         # Update avatar info if avatars exist
         if self.avatars:
             self.on_avatar_changed(0)
@@ -183,12 +294,53 @@ class NewGameDialog(QDialog):
         if self.vs_engine_radio.isChecked():
             self.color_group_widget.setVisible(True)
             self.avatar_group_widget.setVisible(False)
+            self.engine_group_widget.setVisible(True if self.engines else False)
+            self.avatar2_group_widget.setVisible(False)
         elif self.vs_avatar_radio.isChecked():
             self.color_group_widget.setVisible(True)
             self.avatar_group_widget.setVisible(True)
+            self.engine_group_widget.setVisible(False)
+            self.avatar2_group_widget.setVisible(False)
+        elif self.vs_human_radio.isChecked():
+            # Human vs Human: hide color and avatar selection
+            self.color_group_widget.setVisible(False)
+            self.avatar_group_widget.setVisible(False)
+            self.engine_group_widget.setVisible(False)
+            self.avatar2_group_widget.setVisible(False)
+        elif self.engine_vs_engine_radio.isChecked():
+            # Engine vs Engine: hide all player selections
+            self.color_group_widget.setVisible(False)
+            self.avatar_group_widget.setVisible(False)
+            self.engine_group_widget.setVisible(False)
+            self.avatar2_group_widget.setVisible(False)
+        elif self.avatar_vs_avatar_radio.isChecked():
+            # Avatar vs Avatar: show both avatar selections
+            self.color_group_widget.setVisible(False)
+            self.avatar_group_widget.setVisible(True)
+            self.engine_group_widget.setVisible(False)
+            self.avatar2_group_widget.setVisible(True)
+        elif self.avatar_vs_engine_radio.isChecked():
+            # Avatar vs Engine: show avatar selection only
+            self.color_group_widget.setVisible(False)
+            self.avatar_group_widget.setVisible(True)
+            self.engine_group_widget.setVisible(False)
+            self.avatar2_group_widget.setVisible(False)
         else:
             self.color_group_widget.setVisible(False)
             self.avatar_group_widget.setVisible(False)
+            self.engine_group_widget.setVisible(False)
+            self.avatar2_group_widget.setVisible(False)
+    
+    def on_engine_changed(self, index):
+        """Handle engine selection change"""
+        if index >= 0 and index < len(self.engines):
+            engine = self.engines[index]
+            self.selected_engine_name = engine.name
+            protocol = engine.protocol if hasattr(engine, 'protocol') else 'UCI'
+            self.engine_info_label.setText(f"Protocole: {protocol}")
+        else:
+            self.selected_engine_name = None
+            self.engine_info_label.setText("")
     
     def on_avatar_changed(self, index):
         """Handle avatar selection change"""
@@ -206,6 +358,22 @@ class NewGameDialog(QDialog):
         info_text = f"Elo: {elo} | Victoires: {win_rate:.0f}% | Style: {style}"
         self.avatar_info_label.setText(info_text)
     
+    def on_avatar2_changed(self, index):
+        """Handle second avatar selection change"""
+        if index < 0 or index >= len(self.avatars):
+            self.avatar2_info_label.setText("")
+            return
+        
+        avatar = self.avatars[index]
+        
+        # Display avatar info
+        elo = avatar.style_data.get('average_elo', 'N/A')
+        win_rate = avatar.style_data.get('win_rate', 0) * 100
+        style = avatar.style_data.get('play_style', 'Équilibré')
+        
+        info_text = f"Elo: {elo} | Victoires: {win_rate:.0f}% | Style: {style}"
+        self.avatar2_info_label.setText(info_text)
+    
     def get_config(self):
         """Return the game configuration"""
         import random
@@ -215,6 +383,14 @@ class NewGameDialog(QDialog):
             mode = "vs_engine"
         elif self.vs_avatar_radio.isChecked():
             mode = "vs_avatar"
+        elif self.vs_human_radio.isChecked():
+            mode = "vs_human"  # Human vs Human mode
+        elif self.engine_vs_engine_radio.isChecked():
+            mode = "engine_vs_engine"  # NEW: Engine vs Engine
+        elif self.avatar_vs_avatar_radio.isChecked():
+            mode = "avatar_vs_avatar"  # NEW: Avatar vs Avatar
+        elif self.avatar_vs_engine_radio.isChecked():
+            mode = "avatar_vs_engine"  # NEW: Avatar vs Engine
         else:
             mode = "free"
         
@@ -231,14 +407,26 @@ class NewGameDialog(QDialog):
         
         # Get selected avatar ID
         avatar_id = None
-        if mode == "vs_avatar" and self.avatar_combo.currentData():
+        if mode in ["vs_avatar", "avatar_vs_avatar", "avatar_vs_engine"] and self.avatar_combo.currentData():
             avatar_id = self.avatar_combo.currentData()
+        
+        # Get second avatar ID (for Avatar vs Avatar)
+        avatar2_id = None
+        if mode == "avatar_vs_avatar" and self.avatar2_combo.currentData():
+            avatar2_id = self.avatar2_combo.currentData()
+        
+        # Get selected engine name
+        engine_name = None
+        if mode == "vs_engine" and self.selected_engine_name:
+            engine_name = self.selected_engine_name
         
         return {
             'mode': mode,
             'player_color': player_color,
             'time_control': time_control,
-            'avatar_id': avatar_id
+            'avatar_id': avatar_id,
+            'avatar2_id': avatar2_id,  # NEW: Second avatar
+            'engine_name': engine_name  # NEW: Selected engine
         }
     
     def apply_theme(self):

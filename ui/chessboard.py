@@ -7,6 +7,9 @@ from PyQt6.QtGui import QPainter, QColor, QPixmap, QPen, QBrush, QMouseEvent, QF
 import chess
 from typing import Optional, List
 from ui.resolution_manager import get_resolution_manager
+from core.board_themes import BoardThemes
+from core.svg_pieces import SVGPieces
+from ui.promotion_dialog import PromotionDialog
 
 
 class ChessBoardWidget(QWidget):
@@ -26,12 +29,20 @@ class ChessBoardWidget(QWidget):
         self.board_size = self.square_size * 8
         self.piece_font_size = self.res_mgr.get_piece_font_size()
         
-        # Colors
+        # Theme and piece set
+        self.current_theme = "classic"
+        self.piece_set = "svg"  # Use SVG by default (ChessAvatar pieces)
+        self.svg_pieces = SVGPieces("chessavatar", self.square_size)  # ChessAvatar set
+        
+        # Colors (will be updated by set_theme)
         self.light_square = QColor("#f0d9b5")
         self.dark_square = QColor("#b58863")
         self.highlight_color = QColor("#646f40")
         self.selected_color = QColor("#829769")
         self.legal_move_color = QColor("#546e7a")
+        
+        # Apply default theme
+        self.set_theme(self.current_theme)
         
         # Interaction state
         self.selected_square: Optional[int] = None
@@ -84,6 +95,24 @@ class ChessBoardWidget(QWidget):
     def flip_board(self):
         """Flip the board orientation"""
         self.flipped = not self.flipped
+        self.update()
+    
+    def set_theme(self, theme_name: str):
+        """Set the board theme"""
+        self.current_theme = theme_name
+        theme_colors = BoardThemes.get_theme(theme_name)
+        
+        self.light_square = QColor(theme_colors["light"])
+        self.dark_square = QColor(theme_colors["dark"])
+        self.highlight_color = QColor(theme_colors.get("highlight", "#646f40"))
+        self.selected_color = QColor(theme_colors.get("selected", "#829769"))
+        self.legal_move_color = QColor(theme_colors.get("legal_move", "#546e7a"))
+        
+        self.update()
+    
+    def set_piece_set(self, piece_set: str):
+        """Set the piece set (default or svg)"""
+        self.piece_set = piece_set
         self.update()
         
     def square_to_coords(self, square: int) -> tuple:
@@ -168,55 +197,68 @@ class ChessBoardWidget(QWidget):
             y = self.margin + rank * self.square_size + self.square_size // 2 + coord_font_size // 2
             painter.drawText(x, y, label)
             
-        # Draw pieces with scaled font
-        piece_font = QFont()
-        piece_font.setPointSize(self.piece_font_size)
-        painter.setFont(piece_font)
-        
-        for square in chess.SQUARES:
-            piece = self.board.piece_at(square)
-            if piece and not (self.dragging and square == self.from_square):
-                x, y = self.square_to_coords(square)
-                color_key = 'white' if piece.color == chess.WHITE else 'black'
-                symbol = self.piece_symbols[piece.piece_type][color_key]
+        # Draw pieces
+        if self.piece_set == "svg":
+            # Use SVG pieces
+            for square in chess.SQUARES:
+                piece = self.board.piece_at(square)
+                if piece and not (self.dragging and square == self.from_square):
+                    x, y = self.square_to_coords(square)
+                    # Render the piece to a pixmap
+                    pixmap = self.svg_pieces.render_piece(piece, self.square_size)
+                    painter.drawPixmap(x, y, pixmap)
+        else:
+            # Use default Unicode pieces
+            piece_font = QFont()
+            piece_font.setPointSize(self.piece_font_size)
+            painter.setFont(piece_font)
+            
+            for square in chess.SQUARES:
+                piece = self.board.piece_at(square)
+                if piece and not (self.dragging and square == self.from_square):
+                    x, y = self.square_to_coords(square)
+                    color_key = 'white' if piece.color == chess.WHITE else 'black'
+                    symbol = self.piece_symbols[piece.piece_type][color_key]
+                    
+                    # Set piece color
+                    if piece.color == chess.WHITE:
+                        painter.setPen(QColor("#ffffff"))
+                    else:
+                        painter.setPen(QColor("#000000"))
+                        
+                    # Center the piece in the square using Qt alignment
+                    piece_rect = QRect(x, y, self.square_size, self.square_size)
+                    painter.drawText(
+                        piece_rect,
+                        Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter,
+                        symbol
+                    )
                 
-                # Set piece color
-                if piece.color == chess.WHITE:
+        # Draw dragged piece
+        if self.dragging and self.drag_piece:
+            half_square = self.square_size // 2
+            drag_x = self.drag_pos.x() - half_square
+            drag_y = self.drag_pos.y() - half_square
+            
+            if self.piece_set == "svg":
+                # Render the dragged piece to a pixmap
+                pixmap = self.svg_pieces.render_piece(self.drag_piece, self.square_size)
+                painter.drawPixmap(drag_x, drag_y, pixmap)
+            else:
+                color_key = 'white' if self.drag_piece.color == chess.WHITE else 'black'
+                symbol = self.piece_symbols[self.drag_piece.piece_type][color_key]
+                
+                if self.drag_piece.color == chess.WHITE:
                     painter.setPen(QColor("#ffffff"))
                 else:
                     painter.setPen(QColor("#000000"))
                     
-                # Center the piece in the square using Qt alignment
-                piece_rect = QRect(x, y, self.square_size, self.square_size)
+                drag_rect = QRect(drag_x, drag_y, self.square_size, self.square_size)
                 painter.drawText(
-                    piece_rect,
+                    drag_rect,
                     Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter,
                     symbol
                 )
-                
-        # Draw dragged piece
-        if self.dragging and self.drag_piece:
-            color_key = 'white' if self.drag_piece.color == chess.WHITE else 'black'
-            symbol = self.piece_symbols[self.drag_piece.piece_type][color_key]
-            
-            if self.drag_piece.color == chess.WHITE:
-                painter.setPen(QColor("#ffffff"))
-            else:
-                painter.setPen(QColor("#000000"))
-                
-            # Center piece around cursor position
-            half_square = self.square_size // 2
-            drag_rect = QRect(
-                self.drag_pos.x() - half_square,
-                self.drag_pos.y() - half_square,
-                self.square_size,
-                self.square_size
-            )
-            painter.drawText(
-                drag_rect,
-                Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter,
-                symbol
-            )
             
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press"""
@@ -273,10 +315,17 @@ class ChessBoardWidget(QWidget):
                 break
                 
         if move:
-            # Handle pawn promotion (default to queen for now)
+            # Handle pawn promotion - ask user
             if move.promotion is None and self.board.piece_at(from_square).piece_type == chess.PAWN:
                 if chess.square_rank(to_square) in [0, 7]:
-                    move = chess.Move(from_square, to_square, chess.QUEEN)
+                    # Show promotion dialog
+                    dialog = PromotionDialog(self)
+                    if dialog.exec():
+                        promotion_piece = dialog.get_selected_piece()
+                        move = chess.Move(from_square, to_square, promotion_piece)
+                    else:
+                        # User cancelled - default to queen
+                        move = chess.Move(from_square, to_square, chess.QUEEN)
                     
             self.move_made.emit(from_square, to_square)
             
