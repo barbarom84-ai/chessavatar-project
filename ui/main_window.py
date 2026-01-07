@@ -3,7 +3,7 @@ Main window for ChessAvatar application
 """
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QSplitter, QMenuBar, QMenu, QMessageBox, QSizePolicy, 
-                             QFileDialog, QPushButton, QDialog)
+                             QFileDialog, QPushButton, QDialog, QDockWidget)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QIcon
 import chess
@@ -83,7 +83,7 @@ class MainWindow(QMainWindow):
             print("DEBUG: showEvent suivant, auto_start déjà fait")
         
     def init_ui(self):
-        """Initialize the user interface"""
+        """Initialize the user interface with dockable panels"""
         self.setWindowTitle("ChessAvatar - Analyse d'échecs")
         
         # Apply global stylesheet
@@ -93,34 +93,26 @@ class MainWindow(QMainWindow):
         width, height = self.res_mgr.get_window_size()
         self.setGeometry(100, 100, width, height)
         
-        # Create central widget
+        # Enable docking features
+        self.setDockNestingEnabled(True)  # Allow docks to be nested
+        
+        # ===== CENTRAL WIDGET: CHESSBOARD =====
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # Main layout with scaled margins
-        main_layout = QHBoxLayout(central_widget)
-        margin = self.res_mgr.get_margin(10)
-        main_layout.setContentsMargins(margin, margin, margin, margin)
+        central_layout = QVBoxLayout(central_widget)
+        central_layout.setContentsMargins(5, 5, 5, 5)
+        central_layout.setSpacing(5)
         
-        # Create main splitter for resizable panels
-        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.main_splitter.setChildrenCollapsible(False)  # Prevent panels from collapsing
-        
-        # Left side - Chess board with compact panels below
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(self.res_mgr.get_spacing(8))
-        
+        # Chessboard
         self.chessboard = ChessBoardWidget()
         self.chessboard.set_board(self.game.board)
         self.chessboard.move_made.connect(self.on_move_made)
-        # Set size policy to allow expansion but maintain aspect ratio
         self.chessboard.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding
         )
-        left_layout.addWidget(self.chessboard, stretch=10)
+        central_layout.addWidget(self.chessboard, stretch=10)
         
         # Board control widget
         self.board_control = BoardControlWidget()
@@ -131,67 +123,116 @@ class MainWindow(QMainWindow):
         self.board_control.pan_mode_toggled.connect(self.chessboard.set_pan_mode)
         self.board_control.pan_reset_clicked.connect(self.chessboard.reset_pan)
         self.chessboard.zoom_changed.connect(self.board_control.update_zoom_display)
-        self.board_control.setMaximumHeight(self.res_mgr.get_engine_panel_height())
-        left_layout.addWidget(self.board_control)
+        central_layout.addWidget(self.board_control, stretch=0)
         
-        # Create a horizontal splitter for panels below the board
-        self.bottom_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.bottom_splitter.setChildrenCollapsible(False)
+        # ===== DOCKABLE PANELS =====
+        self._create_dock_widgets()
         
-        # Engine panel - compact version
+        # Create menu bar
+        self.create_menu_bar()
+        
+        # Status bar
+        self.statusBar().showMessage("Prêt - Trait aux blancs")
+        
+        # Restore last window state (docks positions, sizes, etc.)
+        self._restore_window_state()
+    
+    def _create_dock_widgets(self):
+        """Create all dockable panels"""
+        
+        # ===== ENGINE PANEL (Bottom) =====
+        self.engine_dock = QDockWidget("⚙ Moteur d'Analyse", self)
+        self.engine_dock.setObjectName("EngineDock")
+        self.engine_dock.setAllowedAreas(
+            Qt.DockWidgetArea.BottomDockWidgetArea | 
+            Qt.DockWidgetArea.TopDockWidgetArea |
+            Qt.DockWidgetArea.LeftDockWidgetArea |
+            Qt.DockWidgetArea.RightDockWidgetArea
+        )
+        
         self.engine_panel = EnginePanel()
         self.engine_panel.start_analysis.connect(self.on_engine_start_analysis)
         self.engine_panel.stop_analysis.connect(self.on_engine_stop_analysis)
         self.engine_panel.option_changed.connect(self.on_engine_option_changed)
-        max_engine_height = self.res_mgr.get_engine_panel_height()
-        self.engine_panel.setMaximumHeight(max_engine_height)
-        self.engine_panel.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Fixed
-        )
-        self.bottom_splitter.addWidget(self.engine_panel)
+        self.engine_dock.setWidget(self.engine_panel)
         
-        # Opening panel - compact version
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.engine_dock)
+        
+        # ===== OPENING PANEL (Bottom, next to engine) =====
+        self.opening_dock = QDockWidget("📖 Ouverture", self)
+        self.opening_dock.setObjectName("OpeningDock")
+        self.opening_dock.setAllowedAreas(
+            Qt.DockWidgetArea.BottomDockWidgetArea | 
+            Qt.DockWidgetArea.TopDockWidgetArea |
+            Qt.DockWidgetArea.LeftDockWidgetArea |
+            Qt.DockWidgetArea.RightDockWidgetArea
+        )
+        
         self.opening_panel = OpeningPanel()
-        self.opening_panel.setMaximumHeight(max_engine_height)
-        self.opening_panel.setMinimumWidth(200)  # Minimum width
-        self.opening_panel.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Fixed
+        self.opening_dock.setWidget(self.opening_panel)
+        
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.opening_dock)
+        self.tabifyDockWidget(self.engine_dock, self.opening_dock)  # Tab them together
+        
+        # ===== NOTATION PANEL (Right) =====
+        self.notation_dock = QDockWidget("📝 Notation", self)
+        self.notation_dock.setObjectName("NotationDock")
+        self.notation_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea |
+            Qt.DockWidgetArea.LeftDockWidgetArea |
+            Qt.DockWidgetArea.BottomDockWidgetArea |
+            Qt.DockWidgetArea.TopDockWidgetArea
         )
-        self.bottom_splitter.addWidget(self.opening_panel)
         
-        # Set initial sizes for bottom splitter (60% engine, 40% opening)
-        self.bottom_splitter.setSizes([600, 400])
-        
-        left_layout.addWidget(self.bottom_splitter, stretch=0)
-        
-        self.main_splitter.addWidget(left_panel)
-        
-        # Right side splitter for vertical panels
-        self.right_splitter = QSplitter(Qt.Orientation.Vertical)
-        self.right_splitter.setChildrenCollapsible(False)
-        self.right_splitter.setObjectName("rightPanel")
-        
-        # Avatar status (who are you playing against)
-        self.avatar_status = AvatarStatusWidget()
-        self.avatar_status.change_avatar_clicked.connect(self.manage_avatars)  # Open avatar selection
-        self.right_splitter.addWidget(self.avatar_status)
-        
-        # Notation panel
         self.notation_panel = NotationPanel()
         self.notation_panel.move_selected.connect(self.on_navigate_to_move)
-        self.right_splitter.addWidget(self.notation_panel)
+        self.notation_dock.setWidget(self.notation_panel)
         
-        # Clock widget
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.notation_dock)
+        
+        # ===== AVATAR STATUS (Right, above notation) =====
+        self.avatar_dock = QDockWidget("👤 Adversaire", self)
+        self.avatar_dock.setObjectName("AvatarDock")
+        self.avatar_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea |
+            Qt.DockWidgetArea.LeftDockWidgetArea |
+            Qt.DockWidgetArea.TopDockWidgetArea
+        )
+        
+        self.avatar_status = AvatarStatusWidget()
+        self.avatar_status.change_avatar_clicked.connect(self.manage_avatars)
+        self.avatar_dock.setWidget(self.avatar_status)
+        
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.avatar_dock)
+        
+        # ===== CLOCK WIDGET (Right, below notation) =====
+        self.clock_dock = QDockWidget("⏱ Pendule", self)
+        self.clock_dock.setObjectName("ClockDock")
+        self.clock_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea |
+            Qt.DockWidgetArea.LeftDockWidgetArea |
+            Qt.DockWidgetArea.TopDockWidgetArea |
+            Qt.DockWidgetArea.BottomDockWidgetArea
+        )
+        
         self.clock_widget = ClockWidget()
         self.clock_widget.time_expired.connect(self.on_time_expired)
-        self.right_splitter.addWidget(self.clock_widget)
+        self.clock_dock.setWidget(self.clock_widget)
         
-        # Game control buttons in a widget
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.clock_dock)
+        
+        # ===== GAME CONTROLS (Right, bottom) =====
+        self.controls_dock = QDockWidget("🎮 Contrôles", self)
+        self.controls_dock.setObjectName("ControlsDock")
+        self.controls_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea |
+            Qt.DockWidgetArea.LeftDockWidgetArea |
+            Qt.DockWidgetArea.BottomDockWidgetArea
+        )
+        
         game_controls_widget = QWidget()
         game_controls_layout = QHBoxLayout(game_controls_widget)
-        game_controls_layout.setSpacing(self.res_mgr.get_spacing(8))
+        game_controls_layout.setSpacing(8)
         game_controls_layout.setContentsMargins(5, 5, 5, 5)
         
         self.resign_button = QPushButton("⚐ Abandonner")
@@ -215,25 +256,12 @@ class MainWindow(QMainWindow):
         self.flip_button.setCursor(Qt.CursorShape.PointingHandCursor)
         game_controls_layout.addWidget(self.flip_button)
         
-        self.right_splitter.addWidget(game_controls_widget)
+        self.controls_dock.setWidget(game_controls_widget)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.controls_dock)
         
-        # Set initial sizes for right splitter (proportional distribution)
-        self.right_splitter.setSizes([150, 400, 100, 60])
-        
-        self.main_splitter.addWidget(self.right_splitter)
-        
-        # Set main splitter proportions (65% left with board, 35% right panels)
-        self.main_splitter.setSizes([1300, 700])
-        
-        main_layout.addWidget(self.main_splitter)
-        
-        # Create menu bar
-        self.create_menu_bar()
-        
-        # Status bar
-        self.statusBar().showMessage("Prêt - Trait aux blancs")
-        
-        # Note: auto_start_engine() is now called from showEvent() after window is shown
+        # Set initial visibility
+        self.engine_dock.show()
+        self.engine_dock.raise_()  # Bring engine tab to front
         
     def create_menu_bar(self):
         """Create the application menu bar"""
@@ -292,29 +320,48 @@ class MainWindow(QMainWindow):
         board_config_action.triggered.connect(self.open_board_config)
         appearance_menu.addAction(board_config_action)
         
-        # NEW: Affichage menu with layout presets
+        # NEW: Affichage menu with layout presets and dock toggles
         display_menu = menubar.addMenu("🖥️ Affichage")
         
-        # Layout presets
-        layout_submenu = QMenu("📐 Dispositions", self)
+        # Dock visibility toggles
+        docks_submenu = QMenu("📐 Panneaux", self)
         
-        default_layout_action = QAction("⚡ Défaut", self)
-        default_layout_action.triggered.connect(lambda: self.apply_layout_preset("default"))
-        layout_submenu.addAction(default_layout_action)
+        self.engine_dock_action = self.engine_dock.toggleViewAction()
+        self.engine_dock_action.setText("⚙ Moteur d'Analyse")
+        docks_submenu.addAction(self.engine_dock_action)
         
-        minimalist_layout_action = QAction("✨ Minimaliste", self)
-        minimalist_layout_action.triggered.connect(lambda: self.apply_layout_preset("minimalist"))
-        layout_submenu.addAction(minimalist_layout_action)
+        self.opening_dock_action = self.opening_dock.toggleViewAction()
+        self.opening_dock_action.setText("📖 Ouverture")
+        docks_submenu.addAction(self.opening_dock_action)
         
-        analysis_layout_action = QAction("🔍 Analyse", self)
-        analysis_layout_action.triggered.connect(lambda: self.apply_layout_preset("analysis"))
-        layout_submenu.addAction(analysis_layout_action)
+        self.notation_dock_action = self.notation_dock.toggleViewAction()
+        self.notation_dock_action.setText("📝 Notation")
+        docks_submenu.addAction(self.notation_dock_action)
         
-        training_layout_action = QAction("🎓 Entraînement", self)
-        training_layout_action.triggered.connect(lambda: self.apply_layout_preset("training"))
-        layout_submenu.addAction(training_layout_action)
+        self.avatar_dock_action = self.avatar_dock.toggleViewAction()
+        self.avatar_dock_action.setText("👤 Adversaire")
+        docks_submenu.addAction(self.avatar_dock_action)
         
-        display_menu.addMenu(layout_submenu)
+        self.clock_dock_action = self.clock_dock.toggleViewAction()
+        self.clock_dock_action.setText("⏱ Pendule")
+        docks_submenu.addAction(self.clock_dock_action)
+        
+        self.controls_dock_action = self.controls_dock.toggleViewAction()
+        self.controls_dock_action.setText("🎮 Contrôles")
+        docks_submenu.addAction(self.controls_dock_action)
+        
+        display_menu.addMenu(docks_submenu)
+        display_menu.addSeparator()
+        
+        # Layout reset
+        reset_layout_action = QAction("↺ Réinitialiser la disposition", self)
+        reset_layout_action.setShortcut("Ctrl+Shift+R")
+        reset_layout_action.triggered.connect(self._reset_layout)
+        display_menu.addAction(reset_layout_action)
+        
+        save_layout_action = QAction("💾 Sauvegarder la disposition", self)
+        save_layout_action.triggered.connect(self._save_window_state)
+        display_menu.addAction(save_layout_action)
         
         # Analyse menu (simplifié)
         analysis_menu = menubar.addMenu("📊 Analyse")
@@ -1714,9 +1761,78 @@ class MainWindow(QMainWindow):
         dialog = AboutDialog(self)
         dialog.exec()
     
+    def _save_window_state(self):
+        """Save window state (dock positions, sizes, etc.)"""
+        import json
+        state = {
+            'geometry': self.saveGeometry().toBase64().data().decode('utf-8'),
+            'window_state': self.saveState().toBase64().data().decode('utf-8')
+        }
+        
+        try:
+            with open('window_state.json', 'w') as f:
+                json.dump(state, f)
+            self.statusBar().showMessage("Disposition sauvegardée !", 2000)
+        except Exception as e:
+            print(f"Error saving window state: {e}")
+    
+    def _restore_window_state(self):
+        """Restore window state from saved file"""
+        import json
+        import os
+        
+        if not os.path.exists('window_state.json'):
+            return
+        
+        try:
+            with open('window_state.json', 'r') as f:
+                state = json.load(f)
+            
+            from PyQt6.QtCore import QByteArray
+            import base64
+            
+            geometry = QByteArray.fromBase64(state['geometry'].encode('utf-8'))
+            window_state = QByteArray.fromBase64(state['window_state'].encode('utf-8'))
+            
+            self.restoreGeometry(geometry)
+            self.restoreState(window_state)
+        except Exception as e:
+            print(f"Error restoring window state: {e}")
+    
+    def _reset_layout(self):
+        """Reset to default layout"""
+        # Remove saved state
+        import os
+        if os.path.exists('window_state.json'):
+            os.remove('window_state.json')
+        
+        # Reset all docks
+        self.engine_dock.setFloating(False)
+        self.opening_dock.setFloating(False)
+        self.notation_dock.setFloating(False)
+        self.avatar_dock.setFloating(False)
+        self.clock_dock.setFloating(False)
+        self.controls_dock.setFloating(False)
+        
+        # Re-add to default positions
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.engine_dock)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.opening_dock)
+        self.tabifyDockWidget(self.engine_dock, self.opening_dock)
+        
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.avatar_dock)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.notation_dock)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.clock_dock)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.controls_dock)
+        
+        self.engine_dock.raise_()
+        self.statusBar().showMessage("Disposition réinitialisée !", 2000)
+    
     def closeEvent(self, event):
         """Handle window close event"""
         print("DEBUG: MainWindow.closeEvent appelé")
+        
+        # Auto-save window state
+        self._save_window_state()
         
         # Stop avatar engine if running
         if self.avatar_engine_manager.is_avatar_running():
