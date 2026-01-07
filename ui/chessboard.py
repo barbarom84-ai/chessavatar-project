@@ -70,14 +70,14 @@ class ChessBoardWidget(QWidget):
         # Evaluation bar (integrated)
         self.evaluation_cp = 0  # Centipawns (positive = white advantage)
         self.evaluation_mate = None  # Mate in X moves
-        self.eval_bar_width = 20  # Width of evaluation bar
+        self.eval_bar_width = 15  # Width of evaluation bar (compact)
         
         # Control buttons visibility
         self.controls_visible = False
-        self.control_button_size = 30
+        self.control_button_size = 28  # Reduced from 30
         
-        # Calculate margins based on resolution
-        self.margin = self.res_mgr.get_margin(30)
+        # Calculate margins based on resolution (smaller margins for compact view)
+        self.margin = self.res_mgr.get_margin(20)  # Reduced from 30
         min_size = self.board_size + self.margin * 2
         self.setMinimumSize(min_size, min_size)
         self.setMouseTracking(True)

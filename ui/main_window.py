@@ -255,13 +255,18 @@ class MainWindow(QMainWindow):
         # Split from clock
         self.splitDockWidget(self.clock_dock, self.controls_dock, Qt.Orientation.Vertical)
         
-        # Set minimum sizes for visibility
-        self.engine_dock.setMinimumHeight(200)
-        self.opening_dock.setMinimumHeight(200)
-        self.notation_dock.setMinimumHeight(150)
-        self.avatar_dock.setMinimumHeight(100)
-        self.clock_dock.setMinimumHeight(80)
-        self.controls_dock.setMinimumHeight(60)
+        # Set minimum sizes for visibility (more compact)
+        self.engine_dock.setMinimumHeight(150)
+        self.opening_dock.setMinimumHeight(150)
+        self.notation_dock.setMinimumHeight(120)
+        self.avatar_dock.setMinimumHeight(80)
+        self.clock_dock.setMinimumHeight(70)
+        self.controls_dock.setMinimumHeight(50)
+        
+        # Set minimum widths to ensure proper rendering
+        self.engine_dock.setMinimumWidth(250)
+        self.opening_dock.setMinimumWidth(200)
+        self.notation_dock.setMinimumWidth(200)
         
         # Set initial sizes using resizeDocks (Qt 5.6+)
         # Make all panels visible with reasonable proportions
@@ -1777,22 +1782,41 @@ class MainWindow(QMainWindow):
         window_height = self.height()
         window_width = self.width()
         
-        # Bottom area: 25% of window height, split 50/50 between engine and opening
-        bottom_height = int(window_height * 0.25)
+        # More compact layout:
+        # Bottom area: 30% of window height for analysis panels
+        # Right area: 35% of window width for game info panels
+        bottom_height = int(window_height * 0.30)
+        right_width = int(window_width * 0.35)
         
-        # Right area: 30% of window width, split between 4 panels
-        right_width = int(window_width * 0.30)
-        right_panel_height = window_height // 4  # Equal split for 4 panels
+        # Split bottom area 50/50
+        engine_height = bottom_height
+        opening_height = bottom_height
         
-        # Resize bottom docks
+        # Split right area into 4 equal panels
+        avatar_height = int(window_height * 0.15)
+        notation_height = int(window_height * 0.35)
+        clock_height = int(window_height * 0.12)
+        controls_height = int(window_height * 0.08)
+        
+        # Resize bottom docks (vertical resize)
         self.resizeDocks([self.engine_dock, self.opening_dock], 
-                        [bottom_height, bottom_height], 
+                        [engine_height, opening_height], 
                         Qt.Orientation.Vertical)
         
-        # Resize right docks  
+        # Resize right docks (vertical resize)
         self.resizeDocks([self.avatar_dock, self.notation_dock, self.clock_dock, self.controls_dock],
-                        [right_panel_height] * 4,
+                        [avatar_height, notation_height, clock_height, controls_height],
                         Qt.Orientation.Vertical)
+        
+        # Resize horizontal proportions
+        # Try to set dock widths
+        self.resizeDocks([self.engine_dock, self.opening_dock],
+                        [int(window_width * 0.5), int(window_width * 0.5)],
+                        Qt.Orientation.Horizontal)
+        
+        self.resizeDocks([self.notation_dock],
+                        [right_width],
+                        Qt.Orientation.Horizontal)
     
     def _save_window_state(self):
         """Save window state (dock positions, sizes, etc.)"""

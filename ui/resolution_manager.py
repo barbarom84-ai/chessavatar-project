@@ -51,13 +51,13 @@ class ResolutionManager:
     
     def get_board_size(self) -> int:
         """Get optimal chess board size for current resolution"""
-        # Base size: 560 pixels (70 * 8)
-        base_board_size = 560
+        # Base size: 480 pixels (60 * 8) - More compact
+        base_board_size = 480
         scaled_size = self.scale(base_board_size)
         
-        # Ensure it fits on screen with margins
-        max_width = self.screen_size.width() * 0.6  # 60% of screen width
-        max_height = self.screen_size.height() * 0.7  # 70% of screen height
+        # Ensure it fits on screen with margins (more conservative)
+        max_width = self.screen_size.width() * 0.45  # 45% of screen width
+        max_height = self.screen_size.height() * 0.55  # 55% of screen height
         
         return int(min(scaled_size, max_width, max_height))
     
@@ -77,13 +77,13 @@ class ResolutionManager:
         width = self.screen_size.width()
         height = self.screen_size.height()
         
-        # Use 85% of screen size for windowed mode
-        optimal_width = int(width * 0.85)
-        optimal_height = int(height * 0.85)
+        # Use 90% of screen size for windowed mode (more space for panels)
+        optimal_width = int(width * 0.90)
+        optimal_height = int(height * 0.88)
         
-        # Minimum size: 1200x700
-        optimal_width = max(1200, optimal_width)
-        optimal_height = max(700, optimal_height)
+        # Minimum size: 1400x800 (larger to accommodate all panels)
+        optimal_width = max(1400, optimal_width)
+        optimal_height = max(800, optimal_height)
         
         return (optimal_width, optimal_height)
     
