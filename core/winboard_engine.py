@@ -259,10 +259,12 @@ class WinboardEngine(QObject):
         self._send_command("new")
         time.sleep(0.05)
         
-        # Send each move in the game using 'usermove' command
+        # Send each move in the game
+        # Note: Some old WinBoard engines (like TheKing) don't support 'usermove'
+        # Send moves directly in coordinate notation
         for move in board.move_stack:
             move_str = move.uci()
-            self._send_command(f"usermove {move_str}")
+            self._send_command(move_str)  # Just send the move without 'usermove' prefix
             time.sleep(0.02)  # Small delay between moves
     
     def go(self, time_limit: float = 5.0):
@@ -309,7 +311,9 @@ class WinboardEngine(QObject):
         
         move_str = move.uci()
         print(f"DEBUG: Sending user move: {move_str}")
-        self._send_command(f"usermove {move_str}")
+        # TheKing and other old WinBoard engines don't support 'usermove'
+        # Just send the move in coordinate notation directly
+        self._send_command(move_str)
         self.board.push(move)
     
     def quit(self):

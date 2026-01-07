@@ -208,72 +208,79 @@ class EnginePanel(QWidget):
         main_layout.addLayout(header_layout)
         
         # UCI Configuration display
-        uci_group = QGroupBox("Configuration")
+        uci_group = QGroupBox("⚙ Configuration")
         uci_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
-                font-size: 10pt;
-                color: #d4d4d4;
-                border: 1px solid #3e3e3e;
-                border-radius: 4px;
-                margin-top: 10px;
-                padding-top: 10px;
+                font-size: 11pt;
+                color: #4FC3F7;
+                border: 2px solid #4FC3F7;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 15px;
+                padding-bottom: 10px;
+                background-color: #1a1a1a;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
+                left: 12px;
+                padding: 0 8px;
+                background-color: #2b2b2b;
             }
         """)
         uci_layout = QVBoxLayout(uci_group)
-        uci_layout.setSpacing(8)
+        uci_layout.setSpacing(12)
+        uci_layout.setContentsMargins(15, 10, 15, 10)
         
         # Threads control row
         threads_row = QHBoxLayout()
-        threads_row.setSpacing(8)
+        threads_row.setSpacing(10)
         
         threads_label_static = QLabel("Threads:")
-        threads_label_static.setStyleSheet("font-size: 10pt; color: #d4d4d4; font-weight: bold;")
+        threads_label_static.setStyleSheet("font-size: 11pt; color: #d4d4d4; font-weight: bold;")
+        threads_label_static.setMinimumWidth(70)
         threads_row.addWidget(threads_label_static)
         
         self.threads_label = QLabel("--")
         self.threads_label.setStyleSheet("""
             QLabel {
-                font-size: 11pt;
+                font-size: 14pt;
                 color: #4FC3F7;
                 font-weight: bold;
-                padding: 2px 8px;
-                background-color: #1e1e1e;
-                border-radius: 3px;
-                min-width: 30px;
+                padding: 4px 12px;
+                background-color: #0e1e2e;
+                border: 1px solid #4FC3F7;
+                border-radius: 4px;
+                min-width: 40px;
             }
         """)
+        self.threads_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         threads_row.addWidget(self.threads_label)
         
         btn_style = """
             QPushButton {
-                background-color: #3e3e3e;
+                background-color: #2e2e2e;
                 color: #d4d4d4;
-                border: 1px solid #555555;
-                border-radius: 3px;
-                min-width: 24px;
-                min-height: 24px;
-                max-width: 24px;
-                max-height: 24px;
-                font-size: 12pt;
+                border: 2px solid #4FC3F7;
+                border-radius: 4px;
+                min-width: 30px;
+                min-height: 30px;
+                max-width: 30px;
+                max-height: 30px;
+                font-size: 14pt;
                 font-weight: bold;
                 padding: 0px;
             }
             QPushButton:hover {
-                background-color: #4e4e4e;
-                border-color: #4FC3F7;
+                background-color: #4FC3F7;
+                color: #1e1e1e;
             }
             QPushButton:pressed {
-                background-color: #2e2e2e;
+                background-color: #0e639c;
             }
             QPushButton:disabled {
                 color: #555555;
-                background-color: #2a2a2a;
+                background-color: #1a1a1a;
                 border-color: #333333;
             }
         """
@@ -297,23 +304,27 @@ class EnginePanel(QWidget):
         
         # Hash row
         hash_row = QHBoxLayout()
-        hash_row.setSpacing(8)
+        hash_row.setSpacing(10)
         
         hash_label_static = QLabel("Hash:")
-        hash_label_static.setStyleSheet("font-size: 10pt; color: #d4d4d4; font-weight: bold;")
+        hash_label_static.setStyleSheet("font-size: 11pt; color: #d4d4d4; font-weight: bold;")
+        hash_label_static.setMinimumWidth(70)
         hash_row.addWidget(hash_label_static)
         
         self.hash_label = QLabel("--")
         self.hash_label.setStyleSheet("""
             QLabel {
-                font-size: 10pt;
+                font-size: 12pt;
                 color: #4FC3F7;
                 font-weight: bold;
-                padding: 2px 8px;
-                background-color: #1e1e1e;
-                border-radius: 3px;
+                padding: 4px 12px;
+                background-color: #0e1e2e;
+                border: 1px solid #4FC3F7;
+                border-radius: 4px;
+                min-width: 80px;
             }
         """)
+        self.hash_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hash_row.addWidget(self.hash_label)
         hash_row.addStretch()
         uci_layout.addLayout(hash_row)
